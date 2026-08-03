@@ -11,6 +11,16 @@ export const registrationSchema = z.object({
   website: z.string().max(0).optional().default(""),
 });
 
+export const adminRegistrationSchema = z.object({
+  fullName: z.string().trim().min(2, "請輸入姓名").max(80),
+  email: z.email("請輸入有效電郵地址").max(160),
+  phone: z.string().trim().min(8, "請輸入聯絡電話").max(30),
+  method: z.enum(["online", "in_person"]),
+  status: z.enum(["confirmed", "cancelled", "waitlist"]),
+  attendedAt: z.union([z.iso.datetime(), z.null()]),
+  notes: z.string().trim().max(500).optional().default(""),
+});
+
 export const eventSchema = z
   .object({
     title: z.string().trim().min(2, "請輸入活動名稱").max(160),

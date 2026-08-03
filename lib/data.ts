@@ -34,8 +34,8 @@ export const getEventBySlug = cache(async (slug: string): Promise<EventRecord | 
 
 export async function getAllEventsForAdmin(): Promise<EventRecord[]> {
   if (isDemoMode()) return DEMO_EVENTS;
-  const admin = createAdminClient();
-  const { data, error } = await admin
+  const supabase = await createClient();
+  const { data, error } = await supabase
     .from("events")
     .select("*")
     .order("start_at", { ascending: true });
@@ -47,8 +47,8 @@ export async function getEventForAdmin(id: string): Promise<EventRecord | null> 
   if (isDemoMode()) {
     return DEMO_EVENTS.find((event) => event.id === id) ?? null;
   }
-  const admin = createAdminClient();
-  const { data, error } = await admin.from("events").select("*").eq("id", id).maybeSingle();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("events").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
   return (data as EventRecord | null) ?? null;
 }
@@ -71,8 +71,8 @@ export async function getRegistrationsForEvent(eventId: string): Promise<Registr
   if (isDemoMode()) {
     return DEMO_REGISTRATION.event_id === eventId ? [DEMO_REGISTRATION] : [];
   }
-  const admin = createAdminClient();
-  const { data, error } = await admin
+  const supabase = await createClient();
+  const { data, error } = await supabase
     .from("registrations")
     .select("*")
     .eq("event_id", eventId)
