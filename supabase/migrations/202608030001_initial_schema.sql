@@ -75,6 +75,7 @@ create table if not exists public.registrations (
 );
 
 create index if not exists events_public_start_idx on public.events(status, start_at);
+create index if not exists events_created_by_idx on public.events(created_by);
 create index if not exists registrations_event_idx on public.registrations(event_id, status);
 create index if not exists registrations_email_idx on public.registrations(event_id, lower(email));
 create index if not exists registrations_qr_idx on public.registrations(qr_token);
@@ -228,15 +229,31 @@ alter table public.admin_profiles enable row level security;
 -- Public visitors only see published events.
 drop policy if exists "Public can read published events" on public.events;
 create policy "Public can read published events" on public.events
-for select to anon, authenticated
+for select to anon
 using (status = 'published');
 
--- Authenticated admin/staff can manage events.
-drop policy if exists "Admins can manage events" on public.events;
-create policy "Admins can manage events" on public.events
-for all to authenticated
+-- Authenticated users see published events; administrators can also see drafts.
+drop policy if exists "Authenticated can read accessible events" on public.events;
+create policy "Authenticated can read accessible events" on public.events
+for select to authenticated
+using (status = 'published' or (select private.is_admin()));
+
+-- Authenticated admin/staff can create and modify events.
+drop policy if exists "Admins can create events" on public.events;
+create policy "Admins can create events" on public.events
+for insert to authenticated
+with check ((select private.is_admin()));
+
+drop policy if exists "Admins can update events" on public.events;
+create policy "Admins can update events" on public.events
+for update to authenticated
 using ((select private.is_admin()))
 with check ((select private.is_admin()));
+
+drop policy if exists "Admins can delete events" on public.events;
+create policy "Admins can delete events" on public.events
+for delete to authenticated
+using ((select private.is_admin()));
 
 -- Admin profiles are readable only by the owner; service role creates them.
 drop policy if exists "Users can read own admin profile" on public.admin_profiles;
@@ -258,18 +275,23 @@ with check ((select private.is_admin()));
 
 -- Data API grants; RLS remains the row-level authority.
 grant usage on schema public to anon, authenticated, service_role;
+revoke all on public.events, public.registrations, public.admin_profiles from anon, authenticated;
 grant select on public.events to anon, authenticated;
 grant insert, update, delete on public.events to authenticated;
 grant select, update on public.registrations to authenticated;
 grant select on public.admin_profiles to authenticated;
 grant all on public.events, public.registrations, public.admin_profiles to service_role;
 
+-- Trigger functions are internal implementation details, not Data API endpoints.
+revoke execute on function public.set_updated_at() from public, anon, authenticated;
+revoke execute on function public.sync_confirmed_count() from public, anon, authenticated;
+
 -- Public event media bucket. Uploads are performed server-side after admin validation.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('event-media', 'event-media', true, 8388608, array['image/jpeg','image/png','image/webp'])
 on conflict (id) do update set public = true, file_size_limit = 8388608, allowed_mime_types = excluded.allowed_mime_types;
 
+-- The bucket is public, so object URLs do not require a storage.objects SELECT
+-- policy. Omitting it also prevents anonymous bucket listing. Uploads are made
+-- only by the server-side service role, which bypasses Storage RLS.
 drop policy if exists "Public can view event media" on storage.objects;
-create policy "Public can view event media" on storage.objects
-for select to anon, authenticated
-using (bucket_id = 'event-media');

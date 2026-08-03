@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/env";
+import { isDemoMode } from "@/lib/env";
 
 export async function getAdminSession() {
-  if (!isSupabaseConfigured()) return null;
+  if (isDemoMode()) return null;
   const supabase = await createClient();
   const {
     data: { user },

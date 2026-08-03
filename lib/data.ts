@@ -1,51 +1,41 @@
 import { cache } from "react";
 import { DEMO_EVENTS, DEMO_REGISTRATION } from "@/lib/demo-data";
-import { isSupabaseConfigured, isServiceRoleConfigured } from "@/lib/env";
+import { isDemoMode } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { EventRecord, RegistrationRecord } from "@/lib/types";
 
 export const getPublishedEvents = cache(async (): Promise<EventRecord[]> => {
-  if (!isSupabaseConfigured()) return DEMO_EVENTS;
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("events")
-      .select("*")
-      .eq("status", "published")
-      .order("start_at", { ascending: true });
-    if (error) throw error;
-    return (data as EventRecord[]) ?? [];
-  } catch (error) {
-    console.error("Falling back to demo events:", error);
-    return DEMO_EVENTS;
-  }
+  if (isDemoMode()) return DEMO_EVENTS;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("events")
+    .select("*")
+    .eq("status", "published")
+    .order("start_at", { ascending: true });
+  if (error) throw new Error(`Supabase events query failed: ${error.message}`);
+  return (data as EventRecord[]) ?? [];
 });
 
 export const getEventBySlug = cache(async (slug: string): Promise<EventRecord | null> => {
-  if (!isSupabaseConfigured()) {
+  if (isDemoMode()) {
     return DEMO_EVENTS.find((event) => event.slug === slug) ?? null;
   }
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("events")
-      .select("*")
-      .eq("slug", slug)
-      .eq("status", "published")
-      .maybeSingle();
-    if (error) throw error;
-    return (data as EventRecord | null) ?? null;
-  } catch (error) {
-    console.error("Unable to fetch event:", error);
-    return DEMO_EVENTS.find((event) => event.slug === slug) ?? null;
-  }
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("events")
+    .select("*")
+    .eq("slug", slug)
+    .eq("status", "published")
+    .maybeSingle();
+  if (error) throw new Error(`Supabase event query failed: ${error.message}`);
+  return (data as EventRecord | null) ?? null;
 });
 
 export async function getAllEventsForAdmin(): Promise<EventRecord[]> {
-  if (!isServiceRoleConfigured()) return DEMO_EVENTS;
-  const admin = createAdminClient();
-  const { data, error } = await admin
+  if (isDemoMode()) return DEMO_EVENTS;
+  const supabase = await createClient();
+  const { data, error } = await supabase
     .from("events")
     .select("*")
     .order("start_at", { ascending: true });
@@ -54,17 +44,17 @@ export async function getAllEventsForAdmin(): Promise<EventRecord[]> {
 }
 
 export async function getEventForAdmin(id: string): Promise<EventRecord | null> {
-  if (!isServiceRoleConfigured()) {
+  if (isDemoMode()) {
     return DEMO_EVENTS.find((event) => event.id === id) ?? null;
   }
-  const admin = createAdminClient();
-  const { data, error } = await admin.from("events").select("*").eq("id", id).maybeSingle();
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("events").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
   return (data as EventRecord | null) ?? null;
 }
 
 export async function getRegistrationByToken(token: string): Promise<RegistrationRecord | null> {
-  if (!isServiceRoleConfigured()) {
+  if (isDemoMode()) {
     return token === DEMO_REGISTRATION.qr_token ? DEMO_REGISTRATION : null;
   }
   const admin = createAdminClient();
@@ -78,11 +68,11 @@ export async function getRegistrationByToken(token: string): Promise<Registratio
 }
 
 export async function getRegistrationsForEvent(eventId: string): Promise<RegistrationRecord[]> {
-  if (!isServiceRoleConfigured()) {
+  if (isDemoMode()) {
     return DEMO_REGISTRATION.event_id === eventId ? [DEMO_REGISTRATION] : [];
   }
-  const admin = createAdminClient();
-  const { data, error } = await admin
+  const supabase = await createClient();
+  const { data, error } = await supabase
     .from("registrations")
     .select("*")
     .eq("event_id", eventId)

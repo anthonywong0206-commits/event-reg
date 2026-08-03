@@ -26,18 +26,26 @@ const timeFormatter = new Intl.DateTimeFormat("zh-HK", {
   hour12: false,
 });
 
+function normalizeDateSpacing(value: string): string {
+  // Node and Chromium can use different Unicode spaces for zh-HK date/time
+  // output. Normalize them so Client Components hydrate deterministically.
+  return value.replace(/\s+/g, " ");
+}
+
 export function formatDateTime(value: string): string {
-  return dateTimeFormatter.format(new Date(value));
+  return normalizeDateSpacing(dateTimeFormatter.format(new Date(value)));
 }
 
 export function formatEventDate(event: Pick<EventRecord, "start_at" | "end_at">): string {
   const start = new Date(event.start_at);
   const end = new Date(event.end_at);
-  return `${dateFormatter.format(start)} ${timeFormatter.format(start)}–${timeFormatter.format(end)}`;
+  return normalizeDateSpacing(
+    `${dateFormatter.format(start)} ${timeFormatter.format(start)}–${timeFormatter.format(end)}`,
+  );
 }
 
 export function formatDeadline(value: string): string {
-  return dateTimeFormatter.format(new Date(value));
+  return normalizeDateSpacing(dateTimeFormatter.format(new Date(value)));
 }
 
 export function remainingSeats(event: Pick<EventRecord, "capacity" | "confirmed_count">): number {

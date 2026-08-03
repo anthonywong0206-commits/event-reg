@@ -4,7 +4,13 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function proxy(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) return NextResponse.next({ request });
+  if (!url || !key) {
+    if (process.env.DEMO_MODE === "true") return NextResponse.next({ request });
+    return NextResponse.json(
+      { error: "Server configuration error: Supabase environment variables are missing." },
+      { status: 503 },
+    );
+  }
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(url, key, {

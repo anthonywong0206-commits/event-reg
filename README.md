@@ -44,15 +44,18 @@ npm run dev
 
 瀏覽 `http://localhost:3000`。
 
-未填寫 Supabase 環境變數時，前台會以內置示範資料運作；示範報名會顯示固定 QR 憑證。正式報名、後台、圖片上載及現場登記必須完成以下雲端設定。
+系統預設為正式資料模式。只有 `DEMO_MODE=true` 時才會使用內置示範資料；`DEMO_MODE=false`（或未設定）而 Supabase 設定不完整時，頁面及 API 會明確報錯，不會靜默回退到假資料。Production／Preview 必須固定使用 `DEMO_MODE=false`。
 
 ## 2. 建立 Supabase 資料庫
 
 1. 在 Supabase 建立新 Project。
 2. 開啟 **SQL Editor**。
-3. 執行：
+3. 按檔名順序執行 migration，再執行 seed：
    - `supabase/migrations/202608030001_initial_schema.sql`
-   - `supabase/seed.sql`（可選，用來加入三個示範活動）
+   - `supabase/migrations/20260803125509_event_registration_security_hardening.sql`
+   - `supabase/migrations/20260803125824_event_registration_advisor_fixes.sql`
+   - `supabase/migrations/20260803141000_event_policy_consolidation.sql`
+   - `supabase/seed.sql`（加入三個初始公開活動）
 4. 到 Project 的 **Connect / API Keys** 取得：
    - Project URL
    - Publishable key
@@ -60,6 +63,7 @@ npm run dev
 5. 將資料填入 `.env.local`：
 
 ```env
+DEMO_MODE=false
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
 SUPABASE_SERVICE_ROLE_KEY=sb_secret_xxx
@@ -75,6 +79,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 - 報名 RPC 只授權 `service_role` 執行。
 - 活動名額於同一資料庫 transaction 鎖定活動列，再驗證及新增報名。
 - 所有 exposed public tables 已啟用 RLS。
+- Storage bucket 只公開物件 URL；匿名使用者不可列出 bucket，圖片上載只經已驗證管理員的 server route 及 service role 執行。
 
 ## 3. 建立首位管理員
 
@@ -105,37 +110,28 @@ RESEND_FROM_EMAIL=活動報名平台 <events@your-domain.com>
 
 未設定 Resend 時，報名仍會成功，QR Code 亦會顯示在成功頁；資料庫的 `email_sent` 會記錄為 `false`，方便管理員跟進。
 
-## 5. 部署至 GitHub
+## 5. GitHub 發佈
 
-在專案資料夾執行：
-
-```bash
-git init
-git add .
-git commit -m "Initial event registration platform"
-git branch -M main
-git remote add origin https://github.com/YOUR_ACCOUNT/YOUR_REPOSITORY.git
-git push -u origin main
-```
-
-`.env.local` 已列入 `.gitignore`，不要把 secret key 上載到 GitHub。
+正式 repository 是 `anthonywong0206-commits/event-reg`。`.env.local`、`.vercel/`、logs 及 build artifacts 已列入 `.gitignore`；任何 service role key、Resend key 或管理員密碼都不得提交或貼到 issue／PR。
 
 首次 `npm install` 後請把產生的 `package-lock.json` 一併提交，讓 GitHub Actions、Vercel 及其他雲端環境使用完全一致的依賴版本。其後可把 CI 內的 `npm install` 改為 `npm ci`。
 
-## 6. 部署至 Vercel
+## 6. Vercel 部署
 
-1. 在 Vercel 選擇 **Add New → Project**。
-2. Import 上一步的 GitHub repository。
-3. Framework Preset 選擇 **Next.js**。
-4. 在 Environment Variables 加入：
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `NEXT_PUBLIC_APP_URL`（正式網址，例如 `https://events.example.org`）
-   - `RESEND_API_KEY`（選填）
-   - `RESEND_FROM_EMAIL`（選填）
-5. Deploy。
-6. 任何環境變數修改後，請重新部署，舊 deployment 不會自動取得新值。
+Vercel project 已連接到 `anthonywong-s-projects/event-reg`。環境變數矩陣：
+
+| 變數 | Development | Preview | Production |
+|---|---:|---:|---:|
+| `DEMO_MODE=false` | ✓ | ✓ | ✓ |
+| `NEXT_PUBLIC_SUPABASE_URL` | ✓ | ✓ | ✓ |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | ✓ | ✓ | ✓ |
+| `SUPABASE_SERVICE_ROLE_KEY` | 本機 `.env.local`／程序注入 | Sensitive | Sensitive |
+| `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` | production fallback | 正式網址 |
+| `RESEND_API_KEY`／`RESEND_FROM_EMAIL` | 外部憑證提供後加入 | 外部憑證提供後加入 | 外部憑證提供後加入 |
+
+Vercel 的 Sensitive Environment Variable 只支援 Production 與 Preview，因此高權限 service role key 不會降級成可讀的 Development 變數；本機開發以 gitignored `.env.local` 或暫時程序環境注入。
+
+`appUrl()` 在 Preview 優先使用該 deployment 的 `VERCEL_URL`，所以 Preview QR Code 指向 Preview；Production 使用 `NEXT_PUBLIC_APP_URL`，所以正式 QR Code 指向 canonical production domain。任何環境變數修改後都要重新部署。
 
 Vercel 可選擇 Git-based deployments：推送到 `main` 自動部署 Production，其他 branch 會建立 Preview Deployment。
 
@@ -214,7 +210,7 @@ npm run typecheck
 npm run build
 ```
 
-正式測試應至少包括：
+完整的實際驗證紀錄見 [`DEPLOYMENT_VERIFICATION.md`](DEPLOYMENT_VERIFICATION.md)。正式測試至少包括：
 
 - 同時提交最後一個名額，只應有一個成功。
 - 到達截止時間後 API 拒絕報名。
