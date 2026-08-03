@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { registrationSchema } from "@/lib/validators";
-import { isServiceRoleConfigured } from "@/lib/env";
+import { isDemoMode, isServiceRoleConfigured } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_REGISTRATION } from "@/lib/demo-data";
 import { sendRegistrationEmail } from "@/lib/email";
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     }
     if (parsed.data.website) return NextResponse.json({ error: "未能處理申請" }, { status: 400 });
 
-    if (!isServiceRoleConfigured()) {
+    if (isDemoMode()) {
       return NextResponse.json({
         id: DEMO_REGISTRATION.id,
         registration_no: DEMO_REGISTRATION.registration_no,
@@ -33,6 +33,12 @@ export async function POST(request: Request) {
         email_sent: false,
         demo: true,
       });
+    }
+    if (!isServiceRoleConfigured()) {
+      return NextResponse.json(
+        { error: "伺服器缺少 Supabase 設定，請聯絡系統管理員。" },
+        { status: 503 },
+      );
     }
 
     const admin = createAdminClient();

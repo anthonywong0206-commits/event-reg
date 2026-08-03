@@ -501,8 +501,8 @@ svg { width: 1.05em; height: 1.05em; flex: 0 0 auto; }
 .registration-stat-grid article div { display: grid; }
 .registration-stat-grid strong { font-size: 25px; line-height: 1; }
 .registration-stat-grid span { margin-top: 5px; color: var(--muted); font-size: 11px; }
-.registration-list-panel { padding: 25px; background: #fff; border: 1px solid var(--line); border-radius: 17px; box-shadow: var(--shadow-sm); }
-.registration-table-wrap { overflow-x: auto; }
+.registration-list-panel { min-width: 0; padding: 25px; background: #fff; border: 1px solid var(--line); border-radius: 17px; box-shadow: var(--shadow-sm); }
+.registration-table-wrap { max-width: 100%; overflow-x: auto; }
 .registration-table { width: 100%; min-width: 980px; border-collapse: collapse; font-size: 12px; }
 .registration-table th { padding: 12px 13px; text-align: left; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .05em; border-bottom: 1px solid var(--line); }
 .registration-table td { padding: 15px 13px; vertical-align: middle; border-bottom: 1px solid #edf1f5; }

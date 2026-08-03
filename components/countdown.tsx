@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 function calculate(deadline: string) {
   const distance = new Date(deadline).getTime() - Date.now();
@@ -13,14 +13,16 @@ function calculate(deadline: string) {
 }
 
 export function Countdown({ deadline }: { deadline: string }) {
-  const initial = useMemo(() => calculate(deadline), [deadline]);
-  const [remaining, setRemaining] = useState(initial);
+  const [remaining, setRemaining] = useState<ReturnType<typeof calculate> | undefined>(undefined);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setRemaining(calculate(deadline)), 1000);
+    const update = () => setRemaining(calculate(deadline));
+    update();
+    const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
   }, [deadline]);
 
+  if (remaining === undefined) return <span aria-hidden="true">-- 日 --:--:--</span>;
   if (!remaining) return <span>報名時間已結束</span>;
   return (
     <span aria-label={`距離截止報名尚餘 ${remaining.days} 日 ${remaining.hours} 小時`}>
