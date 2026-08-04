@@ -663,3 +663,6 @@ svg { width: 1.05em; height: 1.05em; flex: 0 0 auto; }
   .telegram-connect-actions .button { width: 100%; }
   .telegram-health-list > div { grid-template-columns: 1fr; gap: 4px; }
 }
+
+/* Optional participant email */
+.contact-line.muted-contact { color: var(--muted); }

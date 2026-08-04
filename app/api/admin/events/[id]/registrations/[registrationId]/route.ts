@@ -51,7 +51,7 @@ export async function PUT(
       .from("registrations")
       .update({
         full_name: parsed.data.fullName,
-        email: parsed.data.email.toLowerCase(),
+        email: parsed.data.email?.toLowerCase() ?? null,
         phone: parsed.data.phone,
         method: parsed.data.method,
         status: parsed.data.status,

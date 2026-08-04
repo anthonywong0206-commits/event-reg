@@ -1,9 +1,19 @@
 import { z } from "zod";
 
+const optionalEmailSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  },
+  z.email("請輸入有效電郵地址").max(160).nullable(),
+);
+
 export const registrationSchema = z.object({
   eventId: z.uuid("活動資料無效"),
   fullName: z.string().trim().min(2, "請輸入姓名").max(80),
-  email: z.email("請輸入有效電郵地址").max(160),
+  email: optionalEmailSchema,
   phone: z.string().trim().min(8, "請輸入聯絡電話").max(30),
   method: z.enum(["online", "in_person"]),
   notes: z.string().trim().max(500).optional().default(""),
@@ -67,7 +77,7 @@ export const siteSettingsSchema = z.object({
 
 const adminRegistrationFields = {
   fullName: z.string().trim().min(2, "請輸入姓名").max(80),
-  email: z.email("請輸入有效電郵地址").max(160),
+  email: optionalEmailSchema,
   phone: z.string().trim().min(8, "請輸入聯絡電話").max(30),
   method: z.enum(["online", "in_person"]),
   status: z.enum(["confirmed", "cancelled", "waitlist"]),
@@ -83,6 +93,10 @@ export const adminRegistrationCreateSchema = z
   .refine((data) => data.status === "confirmed" || !data.attended, {
     message: "只有已確認參加者可以設定為已出席",
     path: ["attended"],
+  })
+  .refine((data) => !data.sendEmail || Boolean(data.email), {
+    message: "如要發送確認電郵，請先輸入電郵地址",
+    path: ["sendEmail"],
   });
 
 export const adminRegistrationUpdateSchema = z

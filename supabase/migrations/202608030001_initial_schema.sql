@@ -63,7 +63,7 @@ create table if not exists public.registrations (
   event_id uuid not null references public.events(id) on delete restrict,
   registration_no text not null unique,
   full_name text not null check (char_length(full_name) between 2 and 80),
-  email text not null,
+  email text,
   phone text not null,
   method public.registration_method not null,
   status public.registration_status not null default 'confirmed',
@@ -100,11 +100,11 @@ on conflict (setting_key) do nothing;
 
 create index if not exists events_public_start_idx on public.events(status, start_at);
 create index if not exists registrations_event_idx on public.registrations(event_id, status);
-create index if not exists registrations_email_idx on public.registrations(event_id, lower(email));
+create index if not exists registrations_email_idx on public.registrations(event_id, lower(email)) where email is not null;
 create index if not exists registrations_qr_idx on public.registrations(qr_token);
 create unique index if not exists one_active_registration_per_email
   on public.registrations(event_id, lower(email))
-  where status in ('confirmed', 'waitlist');
+  where email is not null and status in ('confirmed', 'waitlist');
 
 create or replace function private.is_admin()
 returns boolean
@@ -218,6 +218,8 @@ as $$
 declare
   target_event public.events%rowtype;
   created_registration public.registrations%rowtype;
+  normalized_email text := nullif(lower(trim(p_email)), '');
+  violated_constraint text;
 begin
   select * into target_event from public.events where id = p_event_id for update;
   if not found then raise exception 'EVENT_NOT_FOUND'; end if;
@@ -226,10 +228,10 @@ begin
   if target_event.registration_deadline <= now() then raise exception 'REGISTRATION_CLOSED'; end if;
   if not (p_method = any(target_event.registration_methods)) then raise exception 'METHOD_NOT_ALLOWED'; end if;
   if target_event.confirmed_count >= target_event.capacity then raise exception 'EVENT_FULL'; end if;
-  if exists (
+  if normalized_email is not null and exists (
     select 1 from public.registrations
     where event_id = p_event_id
-      and lower(email) = lower(trim(p_email))
+      and lower(email) = normalized_email
       and status in ('confirmed', 'waitlist')
   ) then raise exception 'ALREADY_REGISTERED'; end if;
 
@@ -238,13 +240,17 @@ begin
   ) values (
     p_event_id,
     'ER' || to_char(now() at time zone 'Asia/Hong_Kong', 'YYYYMMDD') || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8)),
-    trim(p_full_name), lower(trim(p_email)), trim(p_phone), p_method, nullif(trim(p_notes), '')
+    trim(p_full_name), normalized_email, trim(p_phone), p_method, nullif(trim(p_notes), '')
   ) returning * into created_registration;
 
   return to_jsonb(created_registration);
 exception
   when unique_violation then
-    raise exception 'ALREADY_REGISTERED';
+    get stacked diagnostics violated_constraint = constraint_name;
+    if violated_constraint = 'one_active_registration_per_email' then
+      raise exception 'ALREADY_REGISTERED';
+    end if;
+    raise;
 end;
 $$;
 revoke all on function public.register_for_event(uuid, text, text, text, public.registration_method, text) from public, anon, authenticated;

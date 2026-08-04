@@ -57,7 +57,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           event_id: eventId,
           registration_no: createRegistrationNumber(),
           full_name: parsed.data.fullName,
-          email: parsed.data.email.toLowerCase(),
+          email: parsed.data.email?.toLowerCase() ?? null,
           phone: parsed.data.phone,
           method: parsed.data.method,
           status: parsed.data.status,

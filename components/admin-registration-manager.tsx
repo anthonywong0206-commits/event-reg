@@ -186,7 +186,7 @@ export function AdminRegistrationManager({ event, initialRegistrations }: AdminR
                   <tr key={registration.id}>
                     <td><strong>{registration.registration_no}</strong></td>
                     <td><strong>{registration.full_name}</strong><small>{statusLabels[registration.status]}</small></td>
-                    <td><span className="contact-line"><Mail />{registration.email}</span><span className="contact-line"><Phone />{registration.phone}</span></td>
+                    <td>{registration.email ? <span className="contact-line"><Mail />{registration.email}</span> : <span className="contact-line muted-contact"><Mail />未提供電郵</span>}<span className="contact-line"><Phone />{registration.phone}</span></td>
                     <td>{registration.method === "online" ? "網上報名" : "親身報名"}</td>
                     <td>{formatDateTime(registration.created_at)}</td>
                     <td>{registration.attended_at ? <span className="attendance-chip attended"><CheckCircle2 />已出席<small>{formatDateTime(registration.attended_at)}</small></span> : <span className="attendance-chip pending">未登記</span>}</td>
@@ -221,7 +221,7 @@ export function AdminRegistrationManager({ event, initialRegistrations }: AdminR
               <div className="form-grid">
                 <label className="field"><span>姓名 *</span><input name="fullName" required defaultValue={editingRegistration?.full_name ?? ""} /></label>
                 <label className="field"><span>聯絡電話 *</span><input name="phone" required defaultValue={editingRegistration?.phone ?? ""} /></label>
-                <label className="field field-full"><span>電郵地址 *</span><input name="email" type="email" required defaultValue={editingRegistration?.email ?? ""} /></label>
+                <label className="field field-full"><span>電郵地址（選填）</span><input name="email" type="email" defaultValue={editingRegistration?.email ?? ""} placeholder="填寫後可發送確認電郵及 QR Code" /></label>
                 <label className="field"><span>報名方式 *</span><select name="method" required defaultValue={defaultMethod}>{availableMethods.includes("online") && <option value="online">網上報名{!event.registration_methods.includes("online") ? "（現有紀錄）" : ""}</option>}{availableMethods.includes("in_person") && <option value="in_person">親身報名{!event.registration_methods.includes("in_person") ? "（現有紀錄）" : ""}</option>}</select></label>
                 <label className="field"><span>報名狀態 *</span><select name="status" value={status} onChange={(event: ChangeEvent<HTMLSelectElement>) => { const next = event.target.value as RegistrationStatus; setStatus(next); if (next !== "confirmed") setAttended(false); }}><option value="confirmed">已確認</option><option value="waitlist">候補</option><option value="cancelled">已取消</option></select></label>
                 <label className="field field-full"><span>備註</span><textarea name="notes" rows={4} maxLength={500} defaultValue={editingRegistration?.notes ?? ""} /></label>
@@ -229,7 +229,7 @@ export function AdminRegistrationManager({ event, initialRegistrations }: AdminR
 
               <div className="admin-registration-options">
                 <label className={status !== "confirmed" ? "disabled" : ""}><input type="checkbox" checked={attended} disabled={status !== "confirmed"} onChange={(event: ChangeEvent<HTMLInputElement>) => setAttended(event.target.checked)} /><span><strong>已出席</strong><small>啟用後會記錄目前時間；取消勾選會清除出席時間。</small></span></label>
-                {editor.type === "new" && <label><input type="checkbox" name="sendEmail" /><span><strong>發送確認電郵</strong><small>只會向「已確認」參加者寄出 QR Code 入場憑證。</small></span></label>}
+                {editor.type === "new" && <label><input type="checkbox" name="sendEmail" /><span><strong>發送確認電郵</strong><small>只會向已填寫電郵的「已確認」參加者寄出 QR Code 入場憑證。</small></span></label>}
               </div>
 
               {error && <div className="notice notice-error"><AlertCircle />{error}</div>}

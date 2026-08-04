@@ -1,0 +1,14 @@
+components/registration-form.tsx
+components/admin-registration-manager.tsx
+app/registration/success/page.tsx
+app/api/registrations/route.ts
+app/api/admin/events/[id]/registrations/route.ts
+app/api/admin/events/[id]/registrations/[registrationId]/route.ts
+app/api/admin/events/[id]/registrations/export/route.ts
+lib/validators.ts
+lib/types.ts
+lib/email.ts
+supabase/migrations/202608030001_initial_schema.sql
+supabase/migrations/202608040001_add_registration_start_at.sql
+supabase/migrations/202608040004_make_registration_email_optional.sql
+UPDATE_OPTIONAL_EMAIL.md

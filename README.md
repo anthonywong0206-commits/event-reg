@@ -276,3 +276,7 @@ CRON_SECRET=與 Vercel Production 完全相同的隨機字串
 ```
 
 `CRON_SECRET` 同時必須加入 Vercel Production Environment Variables。工作流程每小時檢查一次；系統會按後台所選的每 3 小時、每 12 小時或每天決定是否發送。即時新報名通知不需要等待排程。
+
+## Optional participant email
+
+Participant email is optional for both public registration and administrator-managed participant records. When no email is provided, the success page still displays a downloadable QR admission credential, but no confirmation email is sent. Existing deployments must apply `supabase/migrations/202608040004_make_registration_email_optional.sql`.

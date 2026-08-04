@@ -1,22 +1,21 @@
--- Add scheduled registration opening to existing deployments.
+-- Make participant email optional while keeping duplicate-email protection when provided.
 
-alter table public.events
-  add column if not exists registration_start_at timestamptz;
+alter table public.registrations
+  alter column email drop not null;
 
--- Existing activities remain open immediately (or from their original creation time).
-update public.events
-set registration_start_at = least(coalesce(created_at, now()), registration_deadline)
-where registration_start_at is null;
+update public.registrations
+set email = null
+where email is not null and btrim(email) = '';
 
-alter table public.events
-  alter column registration_start_at set default now(),
-  alter column registration_start_at set not null;
+drop index if exists public.registrations_email_idx;
+create index registrations_email_idx
+  on public.registrations(event_id, lower(email))
+  where email is not null;
 
-do $$ begin
-  alter table public.events
-    add constraint valid_registration_window
-    check (registration_start_at <= registration_deadline);
-exception when duplicate_object then null; end $$;
+drop index if exists public.one_active_registration_per_email;
+create unique index one_active_registration_per_email
+  on public.registrations(event_id, lower(email))
+  where email is not null and status in ('confirmed', 'waitlist');
 
 create or replace function public.register_for_event(
   p_event_id uuid,
@@ -44,12 +43,15 @@ begin
   if target_event.registration_deadline <= now() then raise exception 'REGISTRATION_CLOSED'; end if;
   if not (p_method = any(target_event.registration_methods)) then raise exception 'METHOD_NOT_ALLOWED'; end if;
   if target_event.confirmed_count >= target_event.capacity then raise exception 'EVENT_FULL'; end if;
+
   if normalized_email is not null and exists (
     select 1 from public.registrations
     where event_id = p_event_id
       and lower(email) = normalized_email
       and status in ('confirmed', 'waitlist')
-  ) then raise exception 'ALREADY_REGISTERED'; end if;
+  ) then
+    raise exception 'ALREADY_REGISTERED';
+  end if;
 
   insert into public.registrations (
     event_id, registration_no, full_name, email, phone, method, notes
@@ -70,5 +72,7 @@ exception
 end;
 $$;
 
-revoke all on function public.register_for_event(uuid, text, text, text, public.registration_method, text) from public, anon, authenticated;
-grant execute on function public.register_for_event(uuid, text, text, text, public.registration_method, text) to service_role;
+revoke all on function public.register_for_event(uuid, text, text, text, public.registration_method, text)
+  from public, anon, authenticated;
+grant execute on function public.register_for_event(uuid, text, text, text, public.registration_method, text)
+  to service_role;

@@ -16,6 +16,9 @@ export async function sendRegistrationEmail(
   registration: RegistrationRecord,
   event: EventRecord,
 ): Promise<{ sent: boolean; error?: string }> {
+  const recipient = registration.email;
+  if (!recipient) return { sent: false };
+
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL;
   if (!apiKey || !from) return { sent: false, error: "RESEND_NOT_CONFIGURED" };
@@ -29,7 +32,7 @@ export async function sendRegistrationEmail(
     const { error } = await resend.emails.send(
       {
         from,
-        to: [registration.email],
+        to: [recipient],
         subject: `報名成功｜${event.title}`,
         html: `
         <div style="font-family:Arial,'Noto Sans TC',sans-serif;background:#f4f7fb;padding:32px;color:#172b4d">

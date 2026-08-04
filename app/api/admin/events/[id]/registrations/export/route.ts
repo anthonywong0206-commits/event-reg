@@ -27,7 +27,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     const rows = (registrations ?? []).map((row) => [
       row.registration_no,
       row.full_name,
-      row.email,
+      row.email ?? "",
       row.phone,
       row.method === "online" ? "網上報名" : "親身報名",
       row.status,

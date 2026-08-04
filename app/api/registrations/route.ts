@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     const { data, error } = await admin.rpc("register_for_event", {
       p_event_id: parsed.data.eventId,
       p_full_name: parsed.data.fullName,
-      p_email: parsed.data.email.toLowerCase(),
+      p_email: parsed.data.email?.toLowerCase() ?? null,
       p_phone: parsed.data.phone,
       p_method: parsed.data.method,
       p_notes: parsed.data.notes || null,

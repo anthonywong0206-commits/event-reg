@@ -35,7 +35,7 @@ export interface RegistrationRecord {
   event_id: string;
   registration_no: string;
   full_name: string;
-  email: string;
+  email: string | null;
   phone: string;
   method: RegistrationMethod;
   status: RegistrationStatus;

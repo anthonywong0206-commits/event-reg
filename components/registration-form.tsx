@@ -69,7 +69,7 @@ export function RegistrationForm({ event, initialMethod }: { event: EventRecord;
         <legend>參加者資料</legend>
         <div className="form-grid">
           <label className="field field-full"><span>姓名 *</span><input name="fullName" autoComplete="name" required maxLength={80} placeholder="請輸入參加者姓名" /></label>
-          <label className="field"><span>電郵地址 *</span><input name="email" type="email" autoComplete="email" required maxLength={160} placeholder="name@example.com" /></label>
+          <label className="field"><span>電郵地址（選填）</span><input name="email" type="email" autoComplete="email" maxLength={160} placeholder="填寫後會收到確認電郵及 QR Code" /></label>
           <label className="field"><span>聯絡電話 *</span><input name="phone" type="tel" autoComplete="tel" required maxLength={30} placeholder="9123 4567" /></label>
           <label className="field field-full"><span>備註</span><textarea name="notes" rows={4} maxLength={500} placeholder="例如無障礙安排、飲食需要或其他查詢（選填）" /></label>
           <label className="honeypot" aria-hidden="true"><span>Website</span><input name="website" tabIndex={-1} autoComplete="off" /></label>
@@ -84,7 +84,7 @@ export function RegistrationForm({ event, initialMethod }: { event: EventRecord;
       {method === "in_person" && (
         <div className="notice notice-info">
           <Building2 />
-          <span>提交後會先保留名額。請按確認電郵指示於指定時間到「{event.contact_address || event.location}」完成核實。</span>
+          <span>提交後會先保留名額。請於指定時間到「{event.contact_address || event.location}」完成核實；如有填寫電郵，系統亦會寄送確認資料。</span>
         </div>
       )}
       {error && <div className="notice notice-error" role="alert"><AlertCircle />{error}</div>}

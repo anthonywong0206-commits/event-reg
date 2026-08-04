@@ -29,12 +29,20 @@ export default async function RegistrationSuccessPage({ searchParams }: { search
             <CheckCircle2 className="success-icon" />
             <span className="success-kicker">申請完成</span>
             <h1>報名成功！</h1>
-            <p>確認資料已發送至 <strong>{registration.email}</strong>。請保存電郵及 QR Code，並於活動當日出示。</p>
+            {registration.email ? (
+              <p>確認資料已發送至 <strong>{registration.email}</strong>。請保存電郵及 QR Code，並於活動當日出示。</p>
+            ) : (
+              <p>你的電子入場 QR Code 已建立。請立即下載或截圖保存，並於活動當日出示。</p>
+            )}
             <div className="success-event-summary">
               <EventImage src={event.poster_image_url} alt="" width={92} height={120} />
               <div><strong>{event.title}</strong><span><CalendarDays />{formatEventDate(event)}</span><span><MapPin />{event.location}</span></div>
             </div>
-            <div className="email-confirmation"><MailCheck /><span><strong>確認電郵及 QR 圖片</strong>如收件箱未有顯示，請檢查垃圾郵件資料夾。</span></div>
+            {registration.email ? (
+              <div className="email-confirmation"><MailCheck /><span><strong>確認電郵及 QR 圖片</strong>如收件箱未有顯示，請檢查垃圾郵件資料夾。</span></div>
+            ) : (
+              <div className="email-confirmation"><QrCode /><span><strong>請保存電子入場憑證</strong>未有填寫電郵，系統不會另行寄送 QR Code。</span></div>
+            )}
             <div className="success-actions"><Link className="button button-primary" href="/">返回活動總覽</Link><Link className="button button-secondary" href={`/events/${event.slug}`}>查看活動詳情</Link></div>
           </div>
           <div className="qr-ticket">
