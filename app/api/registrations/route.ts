@@ -11,6 +11,7 @@ export const runtime = "nodejs";
 const errorMessages: Record<string, string> = {
   EVENT_NOT_FOUND: "找不到活動。",
   EVENT_NOT_PUBLISHED: "此活動尚未公開接受報名。",
+  REGISTRATION_NOT_STARTED: "活動尚未開始報名。",
   REGISTRATION_CLOSED: "活動報名已截止。",
   EVENT_FULL: "活動名額已滿。",
   METHOD_NOT_ALLOWED: "此活動不支援所選報名方法。",
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
 
     if (error) {
       const known = Object.keys(errorMessages).find((code) => error.message.includes(code));
-      return NextResponse.json({ error: known ? errorMessages[known] : "未能完成報名，請稍後再試。" }, { status: known === "EVENT_FULL" || known === "REGISTRATION_CLOSED" ? 409 : 400 });
+      return NextResponse.json({ error: known ? errorMessages[known] : "未能完成報名，請稍後再試。" }, { status: known === "EVENT_FULL" || known === "REGISTRATION_NOT_STARTED" || known === "REGISTRATION_CLOSED" ? 409 : 400 });
     }
 
     const registration = data as RegistrationRecord;

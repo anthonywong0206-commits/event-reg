@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Building2, CheckCircle2, Laptop, MapPinned } from "lucide-react";
 import type { EventRecord, RegistrationMethod } from "@/lib/types";
-import { eventRegistrationState } from "@/lib/format";
+import { eventRegistrationState, formatDateTime } from "@/lib/format";
 
 export function EventDetailActions({ event }: { event: EventRecord }) {
   const [method, setMethod] = useState<RegistrationMethod>(event.registration_methods[0] ?? "online");
@@ -37,7 +37,7 @@ export function EventDetailActions({ event }: { event: EventRecord }) {
             {state === "open" ? (
               <Link className="button button-primary button-large" href={`/events/${event.slug}/register?method=online`}>立即網上報名</Link>
             ) : (
-              <button className="button button-disabled button-large" disabled>{state === "full" ? "名額已滿" : "報名已截止"}</button>
+              <button className="button button-disabled button-large" disabled>{state === "upcoming" ? `將於 ${formatDateTime(event.registration_start_at)} 開始報名` : state === "full" ? "名額已滿" : "報名已截止"}</button>
             )}
           </>
         ) : (
@@ -54,7 +54,7 @@ export function EventDetailActions({ event }: { event: EventRecord }) {
             {state === "open" ? (
               <Link className="button button-secondary button-large" href={`/events/${event.slug}/register?method=in_person`}>預留親身報名名額</Link>
             ) : (
-              <button className="button button-disabled button-large" disabled>{state === "full" ? "名額已滿" : "報名已截止"}</button>
+              <button className="button button-disabled button-large" disabled>{state === "upcoming" ? `將於 ${formatDateTime(event.registration_start_at)} 開始報名` : state === "full" ? "名額已滿" : "報名已截止"}</button>
             )}
           </>
         )}

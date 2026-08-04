@@ -28,6 +28,7 @@ export const eventSchema = z
     address: z.string().trim().max(300).nullable().optional(),
     start_at: z.iso.datetime(),
     end_at: z.iso.datetime(),
+    registration_start_at: z.iso.datetime(),
     registration_deadline: z.iso.datetime(),
     capacity: z.coerce.number().int().min(1).max(100000),
     status: z.enum(["draft", "published", "cancelled"]),
@@ -42,6 +43,10 @@ export const eventSchema = z
   .refine((data) => new Date(data.end_at) > new Date(data.start_at), {
     message: "活動結束時間必須遲於開始時間",
     path: ["end_at"],
+  })
+  .refine((data) => new Date(data.registration_start_at) <= new Date(data.registration_deadline), {
+    message: "開始報名時間必須早於或等於截止報名時間",
+    path: ["registration_start_at"],
   })
   .refine((data) => new Date(data.registration_deadline) <= new Date(data.start_at), {
     message: "截止報名時間必須早於或等於活動開始時間",

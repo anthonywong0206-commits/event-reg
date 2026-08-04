@@ -14,6 +14,7 @@ export interface EventRecord {
   address: string | null;
   start_at: string;
   end_at: string;
+  registration_start_at: string;
   registration_deadline: string;
   capacity: number;
   confirmed_count: number;

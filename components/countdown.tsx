@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 function calculate(deadline: string) {
   const distance = new Date(deadline).getTime() - Date.now();
@@ -12,18 +13,38 @@ function calculate(deadline: string) {
   return { days, hours, minutes, seconds };
 }
 
-export function Countdown({ deadline }: { deadline: string }) {
+export function Countdown({
+  deadline,
+  mode = "deadline",
+  refreshOnComplete = false,
+}: {
+  deadline: string;
+  mode?: "opening" | "deadline";
+  refreshOnComplete?: boolean;
+}) {
+  const router = useRouter();
   const initial = useMemo(() => calculate(deadline), [deadline]);
   const [remaining, setRemaining] = useState(initial);
+  const hasRefreshed = useRef(false);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setRemaining(calculate(deadline)), 1000);
+    hasRefreshed.current = false;
+    const update = () => {
+      const next = calculate(deadline);
+      setRemaining(next);
+      if (!next && refreshOnComplete && !hasRefreshed.current) {
+        hasRefreshed.current = true;
+        router.refresh();
+      }
+    };
+    const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
-  }, [deadline]);
+  }, [deadline, refreshOnComplete, router]);
 
-  if (!remaining) return <span>報名時間已結束</span>;
+  if (!remaining) return <span>{mode === "opening" ? "報名已開始" : "報名時間已結束"}</span>;
+  const ariaLabel = mode === "opening" ? "距離開始報名" : "距離截止報名";
   return (
-    <span aria-label={`距離截止報名尚餘 ${remaining.days} 日 ${remaining.hours} 小時`}>
+    <span aria-label={`${ariaLabel}尚餘 ${remaining.days} 日 ${remaining.hours} 小時`}>
       {remaining.days} 日 {String(remaining.hours).padStart(2, "0")}:{String(remaining.minutes).padStart(2, "0")}:{String(remaining.seconds).padStart(2, "0")}
     </span>
   );

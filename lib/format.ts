@@ -26,6 +26,8 @@ const timeFormatter = new Intl.DateTimeFormat("zh-HK", {
   hour12: false,
 });
 
+export type EventRegistrationState = "upcoming" | "open" | "full" | "closed";
+
 export function formatDateTime(value: string): string {
   return dateTimeFormatter.format(new Date(value));
 }
@@ -44,11 +46,17 @@ export function remainingSeats(event: Pick<EventRecord, "capacity" | "confirmed_
   return Math.max(0, event.capacity - event.confirmed_count);
 }
 
+export function isRegistrationNotStarted(event: Pick<EventRecord, "registration_start_at" | "status">): boolean {
+  return event.status === "published" && new Date(event.registration_start_at).getTime() > Date.now();
+}
+
 export function isRegistrationClosed(event: Pick<EventRecord, "registration_deadline" | "status">): boolean {
   return event.status !== "published" || new Date(event.registration_deadline).getTime() <= Date.now();
 }
 
-export function eventRegistrationState(event: EventRecord): "open" | "full" | "closed" {
+export function eventRegistrationState(event: EventRecord): EventRegistrationState {
+  if (event.status !== "published") return "closed";
+  if (isRegistrationNotStarted(event)) return "upcoming";
   if (event.confirmed_count >= event.capacity) return "full";
   if (isRegistrationClosed(event)) return "closed";
   return "open";

@@ -7,10 +7,11 @@
 ## 已完成功能
 
 - 雜誌式活動首頁、搜尋及分類篩選
-- 活動詳情、剩餘名額、報名進度及截止倒數
+- 活動詳情、開始報名日期、剩餘名額、報名進度及截止倒數
+- 可設定即時或指定日期／時間自動開放報名；未開始活動集中顯示於「即將開始報名」
 - 網上報名及親身報名預留名額
 - 以 PostgreSQL row lock 原子化處理名額，避免同時提交造成超額報名
-- 到達人數上限或截止時間後自動停止接受申請
+- 未到開始時間禁止報名，到達人數上限或截止時間後自動停止接受申請
 - 報名成功頁及專屬 QR Code 電子入場證
 - Resend 確認電郵，QR Code 同時顯示於郵件及以 PNG 附件發送
 - 管理員登入、活動新增／修改／取消／刪除
@@ -51,7 +52,8 @@ npm run dev
 1. 在 Supabase 建立新 Project。
 2. 開啟 **SQL Editor**。
 3. 執行：
-   - `supabase/migrations/202608030001_initial_schema.sql`
+   - 全新 Project：`supabase/migrations/202608030001_initial_schema.sql`
+   - 已部署舊版本：再執行 `supabase/migrations/202608040001_add_registration_start_at.sql`
    - `supabase/seed.sql`（可選，用來加入三個示範活動）
 4. 到 Project 的 **Connect / API Keys** 取得：
    - Project URL
@@ -73,7 +75,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 - `registrations` 沒有任何匿名讀取政策。
 - 管理員權限來自 `admin_profiles`，不使用可由用戶修改的 `user_metadata` 作授權。
 - 報名 RPC 只授權 `service_role` 執行。
-- 活動名額於同一資料庫 transaction 鎖定活動列，再驗證及新增報名。
+- 活動名額於同一資料庫 transaction 鎖定活動列，再驗證開始報名時間、截止時間及名額後新增報名。
 - 所有 exposed public tables 已啟用 RLS。
 
 ## 3. 建立首位管理員

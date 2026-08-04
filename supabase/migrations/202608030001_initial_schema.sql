@@ -36,6 +36,7 @@ create table if not exists public.events (
   address text,
   start_at timestamptz not null,
   end_at timestamptz not null,
+  registration_start_at timestamptz not null default now(),
   registration_deadline timestamptz not null,
   capacity integer not null check (capacity > 0),
   confirmed_count integer not null default 0 check (confirmed_count >= 0),
@@ -51,6 +52,7 @@ create table if not exists public.events (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint valid_event_time check (end_at > start_at),
+  constraint valid_registration_window check (registration_start_at <= registration_deadline),
   constraint valid_registration_deadline check (registration_deadline <= start_at),
   constraint capacity_not_below_count check (capacity >= confirmed_count),
   constraint at_least_one_method check (cardinality(registration_methods) > 0)
@@ -194,6 +196,7 @@ begin
   select * into target_event from public.events where id = p_event_id for update;
   if not found then raise exception 'EVENT_NOT_FOUND'; end if;
   if target_event.status <> 'published' then raise exception 'EVENT_NOT_PUBLISHED'; end if;
+  if target_event.registration_start_at > now() then raise exception 'REGISTRATION_NOT_STARTED'; end if;
   if target_event.registration_deadline <= now() then raise exception 'REGISTRATION_CLOSED'; end if;
   if not (p_method = any(target_event.registration_methods)) then raise exception 'METHOD_NOT_ALLOWED'; end if;
   if target_event.confirmed_count >= target_event.capacity then raise exception 'EVENT_FULL'; end if;

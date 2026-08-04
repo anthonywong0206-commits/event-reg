@@ -9,7 +9,7 @@ import { EventDetailActions } from "@/components/event-detail-actions";
 import { Countdown } from "@/components/countdown";
 import { StatusBadge } from "@/components/status-badge";
 import { getEventBySlug } from "@/lib/data";
-import { formatDeadline, formatEventDate, remainingSeats } from "@/lib/format";
+import { eventRegistrationState, formatDeadline, formatEventDate, remainingSeats } from "@/lib/format";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -21,6 +21,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
   const { slug } = await params;
   const event = await getEventBySlug(slug);
   if (!event) notFound();
+  const registrationState = eventRegistrationState(event);
 
   return (
     <>
@@ -36,12 +37,13 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
               <div><dt><CalendarDays />日期時間</dt><dd>{formatEventDate(event)}</dd></div>
               <div><dt><MapPin />地點</dt><dd>{event.location}{event.address && <small>{event.address}</small>}</dd></div>
               <div><dt><UsersRound />活動名額</dt><dd>上限 {event.capacity} 人，已報名 {event.confirmed_count} 人，尚餘 {remainingSeats(event)} 位</dd></div>
+              <div><dt><Clock3 />開始報名</dt><dd>{formatDeadline(event.registration_start_at)}</dd></div>
               <div><dt><Clock3 />截止報名</dt><dd>{formatDeadline(event.registration_deadline)}</dd></div>
               {event.contact_phone && <div><dt><Phone />查詢</dt><dd>{event.contact_name || "活動服務處"}｜{event.contact_phone}</dd></div>}
             </dl>
             <div className="capacity-panel">
               <div><span>報名進度</span><strong>{event.confirmed_count} / {event.capacity}</strong><div className="progress-track"><i style={{ width: `${Math.min(100, (event.confirmed_count / event.capacity) * 100)}%` }} /></div></div>
-              <div><span>距離截止報名</span><strong className="countdown-text"><Countdown deadline={event.registration_deadline} /></strong></div>
+              <div><span>{registrationState === "upcoming" ? "距離開始報名" : "距離截止報名"}</span><strong className="countdown-text"><Countdown deadline={registrationState === "upcoming" ? event.registration_start_at : event.registration_deadline} mode={registrationState === "upcoming" ? "opening" : "deadline"} refreshOnComplete={registrationState === "upcoming"} /></strong></div>
             </div>
             <EventDetailActions event={event} />
           </div>

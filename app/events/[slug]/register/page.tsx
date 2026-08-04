@@ -7,7 +7,7 @@ import { EventImage } from "@/components/event-image";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getEventBySlug } from "@/lib/data";
-import { eventRegistrationState, formatEventDate, remainingSeats } from "@/lib/format";
+import { eventRegistrationState, formatDateTime, formatEventDate, remainingSeats } from "@/lib/format";
 import type { RegistrationMethod } from "@/lib/types";
 
 export const metadata: Metadata = { title: "活動報名" };
@@ -29,7 +29,7 @@ export default async function RegisterPage({ params, searchParams }: { params: P
           <section className="register-main">
             <div className="page-title"><span>活動報名表</span><h1>完成你的活動申請</h1><p>填寫以下資料後，系統會即時核對名額並發送電子入場證。</p></div>
             {state === "open" ? <RegistrationForm event={event} initialMethod={method} /> : (
-              <div className="closed-message"><h2>{state === "full" ? "活動名額已滿" : "報名已截止"}</h2><p>此活動暫時未能接受新申請。</p><Link className="button button-primary" href="/">瀏覽其他活動</Link></div>
+              <div className="closed-message"><h2>{state === "upcoming" ? "活動尚未開始報名" : state === "full" ? "活動名額已滿" : "報名已截止"}</h2><p>{state === "upcoming" ? `報名將於 ${formatDateTime(event.registration_start_at)} 開放。` : "此活動暫時未能接受新申請。"}</p><Link className="button button-primary" href="/">瀏覽其他活動</Link></div>
             )}
           </section>
           <aside className="register-summary-card">

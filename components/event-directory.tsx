@@ -32,7 +32,7 @@ export function EventDirectory({ events }: { events: EventRecord[] }) {
           {filtered.map((event, index) => <EventCard key={event.id} event={event} size={index === 0 ? "large" : "regular"} />)}
         </div>
       ) : (
-        <div className="empty-state"><Search /><h3>找不到相關活動</h3><p>試試使用其他關鍵字或類別。</p></div>
+        <div className="empty-state"><Search /><h3>{events.length ? "找不到相關活動" : "暫未有已開放活動"}</h3><p>{events.length ? "試試使用其他關鍵字或類別。" : "可到下方查看即將開始報名的活動。"}</p></div>
       )}
     </section>
   );
