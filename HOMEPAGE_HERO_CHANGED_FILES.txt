@@ -1,0 +1,18 @@
+Updated:
+- app/page.tsx
+- app/admin/page.tsx
+- app/globals.css
+- lib/types.ts
+- lib/validators.ts
+- README.md
+- supabase/migrations/202608030001_initial_schema.sql
+- supabase/seed.sql
+
+Added:
+- app/admin/site-settings/page.tsx
+- app/api/admin/site-settings/route.ts
+- app/api/admin/site-settings/upload/route.ts
+- components/admin-site-settings-form.tsx
+- lib/site-settings.ts
+- supabase/migrations/202608040002_add_homepage_hero_settings.sql
+- UPDATE_HOMEPAGE_HERO.md

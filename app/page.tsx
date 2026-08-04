@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, CalendarClock, CheckCircle2, MailCheck, QrCode, Sparkles, UsersRound } from "lucide-react";
 import { EventImage } from "@/components/event-image";
@@ -8,10 +7,11 @@ import { EventDirectory } from "@/components/event-directory";
 import { EventCard } from "@/components/event-card";
 import { Countdown } from "@/components/countdown";
 import { getPublishedEvents } from "@/lib/data";
+import { getPublicSiteSettings } from "@/lib/site-settings";
 import { eventRegistrationState, formatDeadline, remainingSeats } from "@/lib/format";
 
 export default async function HomePage() {
-  const events = await getPublishedEvents();
+  const [events, siteSettings] = await Promise.all([getPublishedEvents(), getPublicSiteSettings()]);
   const upcoming = events
     .filter((event) => eventRegistrationState(event) === "upcoming")
     .sort((a, b) => new Date(a.registration_start_at).getTime() - new Date(b.registration_start_at).getTime());
@@ -29,8 +29,8 @@ export default async function HomePage() {
         <section className="home-hero">
           <div className="shell hero-layout">
             <div className="hero-copy">
-              <h1>連結人與活動<br />創造更多可能</h1>
-              <p>發掘精彩活動、學習新知、參與社群。從活動海報到電子入場證，讓每一次參與都更簡單。</p>
+              <h1>{siteSettings.hero_title}</h1>
+              <p>{siteSettings.hero_description}</p>
               <div className="hero-actions">
                 <Link className="button button-primary button-large" href="#events">探索活動<ArrowRight /></Link>
                 <Link className="button button-ghost button-large" href="#how-it-works">了解報名流程</Link>
@@ -38,7 +38,7 @@ export default async function HomePage() {
               <div className="hero-proof"><span><CheckCircle2 />即時名額顯示</span><span><MailCheck />自動確認電郵</span><span><QrCode />QR Code 入場</span></div>
             </div>
             <div className="hero-visual">
-              <Image src="/images/hero-community.jpg" alt="明亮的社區活動空間" fill priority sizes="(max-width: 900px) 100vw, 50vw" />
+              <EventImage src={siteSettings.hero_image_url} alt={siteSettings.hero_image_alt} fill priority sizes="(max-width: 900px) 100vw, 50vw" />
               <div className="floating-event-card">
                 <span>本月精選</span>
                 <strong>{featured[0]?.title || upcoming[0]?.title || "海洋永續週"}</strong>

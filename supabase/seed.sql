@@ -36,3 +36,15 @@ insert into public.events (
   '/images/forest-poster.jpg', '/images/forest-poster.jpg', '戶外活動組', '2345 6812', '社區中心一樓詢問處', true
 )
 on conflict (id) do nothing;
+
+
+insert into public.event_site_settings (
+  setting_key, hero_title, hero_description, hero_image_url, hero_image_alt
+) values (
+  'homepage',
+  E'連結人與活動\n創造更多可能',
+  '發掘精彩活動、學習新知、參與社群。從活動海報到電子入場證，讓每一次參與都更簡單。',
+  '/images/hero-community.jpg',
+  '明亮的社區活動空間'
+)
+on conflict (setting_key) do nothing;

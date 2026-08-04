@@ -56,3 +56,11 @@ export const eventSchema = z
 export const checkInSchema = z.object({
   token: z.uuid("QR Code 憑證無效"),
 });
+
+
+export const siteSettingsSchema = z.object({
+  hero_title: z.string().trim().min(2, "請輸入首頁主標題").max(240, "首頁主標題不可超過 240 字"),
+  hero_description: z.string().trim().min(2, "請輸入首頁說明文字").max(800, "首頁說明文字不可超過 800 字"),
+  hero_image_url: z.string().trim().min(1, "請上載或輸入橫額圖片").max(1000),
+  hero_image_alt: z.string().trim().min(1, "請輸入圖片替代文字").max(240),
+});

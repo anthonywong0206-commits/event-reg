@@ -52,3 +52,14 @@ export interface RegistrationResult {
   qr_token: string;
   email_sent: boolean;
 }
+
+export interface SiteSettingsRecord {
+  setting_key: "homepage";
+  hero_title: string;
+  hero_description: string;
+  hero_image_url: string;
+  hero_image_alt: string;
+  updated_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}

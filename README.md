@@ -15,8 +15,9 @@
 - 報名成功頁及專屬 QR Code 電子入場證
 - Resend 確認電郵，QR Code 同時顯示於郵件及以 PNG 附件發送
 - 管理員登入、活動新增／修改／取消／刪除
+- 管理員可獨立管理首頁主標題、說明文字及橫額圖片，不會影響活動資料
 - 管理員報名名單、出席狀態及 UTF-8 CSV 匯出
-- Supabase Storage 活動圖片上載
+- Supabase Storage 活動圖片及首頁橫額上載
 - 手機相機掃描 QR URL 後進入工作人員出席登記頁
 - 重複掃描提示，避免同一憑證重複登記
 - Mobile First 響應式介面，支援電腦、平板及手機
@@ -53,7 +54,7 @@ npm run dev
 2. 開啟 **SQL Editor**。
 3. 執行：
    - 全新 Project：`supabase/migrations/202608030001_initial_schema.sql`
-   - 已部署舊版本：再執行 `supabase/migrations/202608040001_add_registration_start_at.sql`
+   - 已部署舊版本：依序執行 `supabase/migrations/202608040001_add_registration_start_at.sql` 及 `supabase/migrations/202608040002_add_homepage_hero_settings.sql`
    - `supabase/seed.sql`（可選，用來加入三個示範活動）
 4. 到 Project 的 **Connect / API Keys** 取得：
    - Project URL

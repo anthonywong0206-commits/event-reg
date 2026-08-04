@@ -76,6 +76,28 @@ create table if not exists public.registrations (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.event_site_settings (
+  setting_key text primary key default 'homepage',
+  hero_title text not null default E'連結人與活動\n創造更多可能',
+  hero_description text not null default '發掘精彩活動、學習新知、參與社群。從活動海報到電子入場證，讓每一次參與都更簡單。',
+  hero_image_url text not null default '/images/hero-community.jpg',
+  hero_image_alt text not null default '明亮的社區活動空間',
+  updated_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint homepage_settings_singleton check (setting_key = 'homepage'),
+  constraint hero_title_length check (char_length(hero_title) between 2 and 240),
+  constraint hero_description_length check (char_length(hero_description) between 2 and 800),
+  constraint hero_image_url_length check (char_length(hero_image_url) between 1 and 1000),
+  constraint hero_image_alt_length check (char_length(hero_image_alt) between 1 and 240)
+);
+
+create index if not exists event_site_settings_updated_by_idx
+  on public.event_site_settings(updated_by);
+
+insert into public.event_site_settings (setting_key) values ('homepage')
+on conflict (setting_key) do nothing;
+
 create index if not exists events_public_start_idx on public.events(status, start_at);
 create index if not exists registrations_event_idx on public.registrations(event_id, status);
 create index if not exists registrations_email_idx on public.registrations(event_id, lower(email));
@@ -171,6 +193,10 @@ drop trigger if exists registrations_set_updated_at on public.registrations;
 create trigger registrations_set_updated_at before update on public.registrations
 for each row execute function public.set_updated_at();
 
+drop trigger if exists event_site_settings_set_updated_at on public.event_site_settings;
+create trigger event_site_settings_set_updated_at before update on public.event_site_settings
+for each row execute function public.set_updated_at();
+
 drop trigger if exists registrations_sync_confirmed_count on public.registrations;
 create trigger registrations_sync_confirmed_count
 before insert or update of status, event_id or delete on public.registrations
@@ -227,12 +253,19 @@ grant execute on function public.register_for_event(uuid, text, text, text, publ
 alter table public.events enable row level security;
 alter table public.registrations enable row level security;
 alter table public.admin_profiles enable row level security;
+alter table public.event_site_settings enable row level security;
 
 -- Public visitors only see published events.
 drop policy if exists "Public can read published events" on public.events;
 create policy "Public can read published events" on public.events
 for select to anon, authenticated
 using (status = 'published');
+
+-- Homepage hero settings are public to read and written only by the server-side service role.
+drop policy if exists "Public can read homepage settings" on public.event_site_settings;
+create policy "Public can read homepage settings" on public.event_site_settings
+for select to anon, authenticated
+using (setting_key = 'homepage');
 
 -- Authenticated admin/staff can manage events.
 drop policy if exists "Admins can manage events" on public.events;
@@ -265,7 +298,8 @@ grant select on public.events to anon, authenticated;
 grant insert, update, delete on public.events to authenticated;
 grant select, update on public.registrations to authenticated;
 grant select on public.admin_profiles to authenticated;
-grant all on public.events, public.registrations, public.admin_profiles to service_role;
+grant select on public.event_site_settings to anon, authenticated;
+grant all on public.events, public.registrations, public.admin_profiles, public.event_site_settings to service_role;
 
 -- Public event media bucket. Uploads are performed server-side after admin validation.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
