@@ -64,3 +64,31 @@ export const siteSettingsSchema = z.object({
   hero_image_url: z.string().trim().min(1, "請上載或輸入橫額圖片").max(1000),
   hero_image_alt: z.string().trim().min(1, "請輸入圖片替代文字").max(240),
 });
+
+const adminRegistrationFields = {
+  fullName: z.string().trim().min(2, "請輸入姓名").max(80),
+  email: z.email("請輸入有效電郵地址").max(160),
+  phone: z.string().trim().min(8, "請輸入聯絡電話").max(30),
+  method: z.enum(["online", "in_person"]),
+  status: z.enum(["confirmed", "cancelled", "waitlist"]),
+  notes: z.string().trim().max(500).optional().default(""),
+  attended: z.boolean().optional().default(false),
+};
+
+export const adminRegistrationCreateSchema = z
+  .object({
+    ...adminRegistrationFields,
+    sendEmail: z.boolean().optional().default(false),
+  })
+  .refine((data) => data.status === "confirmed" || !data.attended, {
+    message: "只有已確認參加者可以設定為已出席",
+    path: ["attended"],
+  });
+
+export const adminRegistrationUpdateSchema = z
+  .object(adminRegistrationFields)
+  .refine((data) => data.status === "confirmed" || !data.attended, {
+    message: "只有已確認參加者可以設定為已出席",
+    path: ["attended"],
+  });
+

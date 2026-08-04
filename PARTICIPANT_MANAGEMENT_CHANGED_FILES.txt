@@ -1,0 +1,13 @@
+新增：
+components/admin-registration-manager.tsx
+app/api/admin/events/[id]/registrations/route.ts
+app/api/admin/events/[id]/registrations/[registrationId]/route.ts
+lib/registration-admin.ts
+UPDATE_PARTICIPANT_MANAGEMENT.md
+PARTICIPANT_MANAGEMENT_CHANGED_FILES.txt
+
+修改：
+app/admin/events/[id]/registrations/page.tsx
+app/globals.css
+lib/validators.ts
+lib/types.ts

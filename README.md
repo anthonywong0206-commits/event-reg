@@ -16,7 +16,7 @@
 - Resend 確認電郵，QR Code 同時顯示於郵件及以 PNG 附件發送
 - 管理員登入、活動新增／修改／取消／刪除
 - 管理員可獨立管理首頁主標題、說明文字及橫額圖片，不會影響活動資料
-- 管理員報名名單、出席狀態及 UTF-8 CSV 匯出
+- 管理員可在報名名單手動新增、修改及刪除參加者，並管理出席狀態及匯出 UTF-8 CSV
 - Supabase Storage 活動圖片及首頁橫額上載
 - 手機相機掃描 QR URL 後進入工作人員出席登記頁
 - 重複掃描提示，避免同一憑證重複登記
@@ -73,7 +73,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 - `SUPABASE_SERVICE_ROLE_KEY` 只在 Next.js Route Handler 使用，沒有 `NEXT_PUBLIC_` 前綴，不會傳到瀏覽器。
 - 公眾只可讀取 `published` 活動。
-- `registrations` 沒有任何匿名讀取政策。
+- `registrations` 沒有任何匿名讀取政策；手動參加者管理只可經已驗證的後台 API 使用。
 - 管理員權限來自 `admin_profiles`，不使用可由用戶修改的 `user_metadata` 作授權。
 - 報名 RPC 只授權 `service_role` 執行。
 - 活動名額於同一資料庫 transaction 鎖定活動列，再驗證開始報名時間、截止時間及名額後新增報名。

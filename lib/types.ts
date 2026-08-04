@@ -42,7 +42,10 @@ export interface RegistrationRecord {
   qr_token: string;
   attended_at: string | null;
   notes: string | null;
+  email_sent?: boolean;
+  email_error?: string | null;
   created_at: string;
+  updated_at?: string;
   event?: EventRecord;
 }
 
