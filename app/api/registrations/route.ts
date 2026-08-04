@@ -4,6 +4,7 @@ import { isServiceRoleConfigured } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEMO_REGISTRATION } from "@/lib/demo-data";
 import { sendRegistrationEmail } from "@/lib/email";
+import { notifyNewRegistration } from "@/lib/telegram";
 import type { EventRecord, RegistrationRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -69,6 +70,9 @@ export async function POST(request: Request) {
       .from("registrations")
       .update({ email_sent: emailResult.sent, email_error: emailResult.error || null })
       .eq("id", registration.id);
+
+    // Telegram delivery is best-effort and must never make a successful registration fail.
+    await notifyNewRegistration(registration.id);
 
     return NextResponse.json({
       id: registration.id,

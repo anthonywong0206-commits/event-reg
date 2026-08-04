@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { assertAdminForApi } from "@/lib/auth";
 import { sendRegistrationEmail } from "@/lib/email";
+import { notifyNewRegistration } from "@/lib/telegram";
 import { isServiceRoleConfigured } from "@/lib/env";
 import { createRegistrationNumber, registrationAdminError } from "@/lib/registration-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -93,6 +94,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         .update({ email_sent: emailSent, email_error: emailError })
         .eq("id", registration.id);
     }
+
+    // Manual additions use the same Telegram notification queue as public registrations.
+    await notifyNewRegistration(registration.id);
 
     revalidatePath(`/admin/events/${eventId}/registrations`);
     revalidatePath("/admin");

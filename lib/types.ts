@@ -66,3 +66,37 @@ export interface SiteSettingsRecord {
   created_at?: string;
   updated_at?: string;
 }
+
+export type TelegramNotificationFrequency = "instant" | "3h" | "12h" | "daily";
+
+export interface TelegramNotificationSettingsRecord {
+  setting_key: "admin";
+  enabled: boolean;
+  frequency: TelegramNotificationFrequency;
+  chat_id: string | null;
+  chat_label: string | null;
+  bot_username: string | null;
+  connect_token?: string | null;
+  connect_expires_at?: string | null;
+  connected_at: string | null;
+  last_digest_at: string;
+  last_sent_at: string | null;
+  last_error: string | null;
+  updated_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TelegramNotificationQueueRecord {
+  id: string;
+  registration_id: string;
+  event_id: string;
+  processing_at: string | null;
+  delivered_at: string | null;
+  discarded_at: string | null;
+  attempts: number;
+  last_error: string | null;
+  telegram_message_id?: number | null;
+  created_at: string;
+}
+

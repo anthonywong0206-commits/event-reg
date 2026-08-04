@@ -18,3 +18,7 @@ export function appUrl(): string {
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return "http://localhost:3000";
 }
+
+export function isCronSecretConfigured(): boolean {
+  return Boolean(process.env.CRON_SECRET?.trim());
+}

@@ -92,3 +92,9 @@ export const adminRegistrationUpdateSchema = z
     path: ["attended"],
   });
 
+
+export const telegramSettingsSchema = z.object({
+  enabled: z.boolean(),
+  frequency: z.enum(["instant", "3h", "12h", "daily"]),
+  chatId: z.string().trim().max(80).optional().default(""),
+});

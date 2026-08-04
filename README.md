@@ -17,6 +17,7 @@
 - 管理員登入、活動新增／修改／取消／刪除
 - 管理員可獨立管理首頁主標題、說明文字及橫額圖片，不會影響活動資料
 - 管理員可在報名名單手動新增、修改及刪除參加者，並管理出席狀態及匯出 UTF-8 CSV
+- Telegram Bot 管理員通知：新報名即時通知，或每 3 小時／12 小時／每天彙總；訊息包含參加者姓名、活動及總報名人數
 - Supabase Storage 活動圖片及首頁橫額上載
 - 手機相機掃描 QR URL 後進入工作人員出席登記頁
 - 重複掃描提示，避免同一憑證重複登記
@@ -31,6 +32,7 @@
 - Supabase Postgres、Auth、Storage、RLS
 - Vercel Node.js Functions／Next.js standalone Docker image
 - Resend Email API
+- Telegram Bot API + Vercel Cron Jobs
 - `qrcode` 伺服器端 QR PNG 產生器
 - 純 CSS 設計系統，沒有依賴大型 UI framework
 
@@ -54,7 +56,8 @@ npm run dev
 2. 開啟 **SQL Editor**。
 3. 執行：
    - 全新 Project：`supabase/migrations/202608030001_initial_schema.sql`
-   - 已部署舊版本：依序執行 `supabase/migrations/202608040001_add_registration_start_at.sql` 及 `supabase/migrations/202608040002_add_homepage_hero_settings.sql`
+   - 已部署舊版本：依序執行 `supabase/migrations/202608040001_add_registration_start_at.sql`、`supabase/migrations/202608040002_add_homepage_hero_settings.sql` 及 `supabase/migrations/202608040003_add_telegram_notifications.sql`
+   - 全新 Project 執行初始 schema 後，亦需執行 `202608040003_add_telegram_notifications.sql` 以啟用 Telegram 通知佇列
    - `supabase/seed.sql`（可選，用來加入三個示範活動）
 4. 到 Project 的 **Connect / API Keys** 取得：
    - Project URL
@@ -108,7 +111,36 @@ RESEND_FROM_EMAIL=活動報名平台 <events@your-domain.com>
 
 未設定 Resend 時，報名仍會成功，QR Code 亦會顯示在成功頁；資料庫的 `email_sent` 會記錄為 `false`，方便管理員跟進。
 
-## 5. 部署至 GitHub
+
+## 5. 設定 Telegram Bot 通知
+
+Telegram Bot 不能以電話號碼直接尋找或傳送訊息給用戶。你提供的電話號碼不會寫入網站；必須先在 Telegram 主動開啟 Bot 並按 **Start／開始**，系統才可取得 Chat ID。
+
+1. 在 Telegram 開啟 **@BotFather**，建立一個 Bot 並取得 Token。
+2. 在 `.env.local` 或 Vercel Environment Variables 加入：
+
+```env
+TELEGRAM_BOT_TOKEN=123456789:your_botfather_token
+CRON_SECRET=請使用至少16字元的隨機密碼
+```
+
+3. 重新部署網站。
+4. 登入 `/admin/telegram`。
+5. 按「開啟 Telegram 連接」，在 Telegram 對 Bot 按 Start，再返回後台按「完成連接」。
+6. 發送測試訊息，選擇頻率並啟用通知。
+
+可選頻率：
+
+- 每當有新報名：報名完成後立即發送；失敗時由排程重試。
+- 每 3 小時：把期間內的參加者合併為一則彙總。
+- 每 12 小時：把期間內的參加者合併為一則彙總。
+- 每天：每 24 小時發送一次彙總。
+
+`vercel.json` 已設定每小時呼叫 `/api/cron/telegram`。系統會檢查管理員所選頻率，只在到期時發送。`CRON_SECRET` 用來驗證 Vercel Cron 的 Authorization header；不要提交到 GitHub。
+
+Bot Token 只由伺服器讀取，不會儲存在 Supabase、瀏覽器或管理後台表單。
+
+## 6. 部署至 GitHub
 
 在專案資料夾執行：
 
@@ -125,7 +157,7 @@ git push -u origin main
 
 首次 `npm install` 後請把產生的 `package-lock.json` 一併提交，讓 GitHub Actions、Vercel 及其他雲端環境使用完全一致的依賴版本。其後可把 CI 內的 `npm install` 改為 `npm ci`。
 
-## 6. 部署至 Vercel
+## 7. 部署至 Vercel
 
 1. 在 Vercel 選擇 **Add New → Project**。
 2. Import 上一步的 GitHub repository。
@@ -137,13 +169,15 @@ git push -u origin main
    - `NEXT_PUBLIC_APP_URL`（正式網址，例如 `https://events.example.org`）
    - `RESEND_API_KEY`（選填）
    - `RESEND_FROM_EMAIL`（選填）
+   - `TELEGRAM_BOT_TOKEN`（Telegram 通知必須）
+   - `CRON_SECRET`（Telegram 排程必須，至少 16 字元）
 5. Deploy。
 6. 任何環境變數修改後，請重新部署，舊 deployment 不會自動取得新值。
 
 Vercel 可選擇 Git-based deployments：推送到 `main` 自動部署 Production，其他 branch 會建立 Preview Deployment。
 
 
-## 7. 使用 Docker 部署至其他雲端
+## 8. 使用 Docker 部署至其他雲端
 
 專案已設定 `output: "standalone"`，並附有多階段 `Dockerfile`。適用於支援 Docker image 的雲端服務或自建伺服器。
 
@@ -154,7 +188,7 @@ docker run --env-file .env.local -p 3000:3000 event-registration-platform
 
 容器內只包含正式執行所需的 standalone server、靜態檔案及 public assets。Supabase 仍負責資料庫、登入及圖片儲存，因此不同裝置會共用同一批雲端資料。
 
-## 8. 工作人員現場登記流程
+## 9. 工作人員現場登記流程
 
 QR Code 內容是一個網址：
 
@@ -172,7 +206,7 @@ https://你的網域/check-in?token=專屬UUID
 
 此方式不需要額外相機掃描套件，因此在 iOS、Android、桌面及不同瀏覽器上更穩定。
 
-## 9. 建議正式上線前設定
+## 10. 建議正式上線前設定
 
 - 把示範活動圖片及文字換成機構內容。
 - 在 Supabase Auth 設定較短的 JWT expiry，並限制管理員帳戶。
@@ -195,6 +229,8 @@ https://你的網域/check-in?token=專屬UUID
 | `/admin/events/new` | 建立活動 |
 | `/admin/events/[id]` | 編輯活動 |
 | `/admin/events/[id]/registrations` | 報名及出席名單、CSV 匯出 |
+| `/admin/telegram` | Telegram Bot 連接、收件人及通知頻率設定 |
+| `/api/cron/telegram` | 由 GitHub Actions 每小時呼叫的受保護通知處理端點 |
 | `/check-in?token=...` | 工作人員出席登記 |
 
 ## 檔案結構
@@ -223,8 +259,20 @@ npm run build
 - 到達截止時間後 API 拒絕報名。
 - 相同電郵不可重複登記同一活動。
 - 非管理員不可存取活動管理 API、圖片上載及 check-in API。
-- service role key 不可出現在瀏覽器 bundle 或 Git repository。
+- service role key、Telegram Bot Token 及 CRON_SECRET 不可出現在瀏覽器 bundle 或 Git repository。
+- 啟用 Telegram 通知後，新報名應進入通知佇列；即時及 3／12／24 小時模式均不應重複發送同一報名。
 
 ## License
 
 MIT
+
+### Telegram 排程設定（GitHub Actions）
+
+為兼容 Vercel Hobby，定時彙總由 `.github/workflows/telegram-notification-scheduler.yml` 每小時觸發。請在 GitHub Repository Actions secrets 設定：
+
+```text
+TELEGRAM_CRON_URL=https://你的正式網域/api/cron/telegram
+CRON_SECRET=與 Vercel Production 完全相同的隨機字串
+```
+
+`CRON_SECRET` 同時必須加入 Vercel Production Environment Variables。工作流程每小時檢查一次；系統會按後台所選的每 3 小時、每 12 小時或每天決定是否發送。即時新報名通知不需要等待排程。
