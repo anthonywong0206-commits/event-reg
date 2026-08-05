@@ -11,15 +11,17 @@ type EventImageProps = {
   priority?: boolean;
   className?: string;
   style?: CSSProperties;
+  objectFit?: CSSProperties["objectFit"];
+  objectPosition?: CSSProperties["objectPosition"];
 };
 
-export function EventImage({ src, alt, fill, width, height, sizes, priority, className, style }: EventImageProps) {
+export function EventImage({ src, alt, fill, width, height, sizes, priority, className, style, objectFit = "cover", objectPosition = "center" }: EventImageProps) {
   const isRemote = /^https?:\/\//i.test(src);
 
   if (isRemote) {
     const remoteStyle: CSSProperties = fill
-      ? { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", ...style }
-      : { width, height, objectFit: "cover", ...style };
+      ? { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit, objectPosition, ...style }
+      : { width, height, objectFit, objectPosition, ...style };
     return (
       // Remote Supabase Storage hostnames differ per project, so render trusted admin-provided URLs directly.
       // eslint-disable-next-line @next/next/no-img-element
@@ -46,7 +48,7 @@ export function EventImage({ src, alt, fill, width, height, sizes, priority, cla
       sizes={sizes}
       priority={priority}
       className={className}
-      style={style}
+      style={{ objectFit, objectPosition, ...style }}
     />
   );
 }

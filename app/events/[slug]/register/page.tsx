@@ -33,7 +33,7 @@ export default async function RegisterPage({ params, searchParams }: { params: P
             )}
           </section>
           <aside className="register-summary-card">
-            <div className="summary-poster"><EventImage src={event.poster_image_url} alt="" fill sizes="320px" /></div>
+            <div className="summary-poster"><EventImage src={event.poster_image_url} alt="" fill sizes="320px" objectFit="contain" objectPosition="center" /></div>
             <span className="category-tag static">{event.category}</span>
             <h2>{event.title}</h2>
             <ul><li><CalendarDays />{event.is_multi_session ? `${event.sessions?.length || 0} 個日期／時段可選` : formatEventDate(event)}</li><li><MapPin />{event.location}</li><li><UsersRound />{event.is_multi_session ? "請於表格選擇時段" : `尚餘 ${remainingSeats(event)} 位`}</li></ul>

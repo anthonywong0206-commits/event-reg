@@ -29,7 +29,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
       <main className="event-detail-page">
         <div className="shell breadcrumb"><Link href="/"><ArrowLeft />返回活動總覽</Link><span>/</span><span>{event.category}</span></div>
         <section className="shell event-detail-hero">
-          <div className="detail-poster"><EventImage src={event.poster_image_url} alt={`${event.title} 活動海報`} fill priority sizes="(max-width: 800px) 100vw, 32vw" /></div>
+          <div className="detail-poster"><EventImage src={event.poster_image_url} alt={`${event.title} 活動海報`} fill priority sizes="(max-width: 800px) 100vw, 32vw" objectFit="contain" objectPosition="center" /></div>
           <div className="detail-content">
             <div className="detail-title-row"><div><span className="category-tag static">{event.category}</span><h1>{event.title}</h1>{event.subtitle && <p className="detail-subtitle">{event.subtitle}</p>}</div><StatusBadge event={event} /></div>
             <p className="detail-summary">{event.summary}</p>
