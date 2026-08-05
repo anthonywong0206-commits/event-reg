@@ -284,3 +284,7 @@ Participant email is optional for both public registration and administrator-man
 ## 多日期／多時段活動
 
 最新版本支援管理員於 `/admin/events/new/multi` 建立多日期、多時段活動。每個時段有獨立名額；參加者報名時選擇指定時段，管理員可在報名名單拖放參加者至其他時段。部署此版本前須套用 `202608050001_add_multi_session_events.sql`。
+
+## Excel 批量匯入參加者
+
+管理員可在活動的「參加者名單」頁下載該活動專用的 `.xlsx` 範本並上傳匯入。多時段活動的範本會包含「可選時段」工作表；匯入時以活動日期及開始時間配對時段。每次最多 500 筆、5MB。系統會逐行驗證並回報失敗行，不會因個別錯誤中止其他有效資料。
