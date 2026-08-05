@@ -7,6 +7,13 @@ import type { EventRecord, RegistrationRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
 
+function emailErrorMessage(error?: string): string {
+  if (error === "RESEND_NOT_CONFIGURED") return "Vercel 尚未設定 RESEND_API_KEY 或 RESEND_FROM_EMAIL";
+  if (error === "RESEND_FROM_EMAIL_INVALID") return "RESEND_FROM_EMAIL 格式無效，請使用 name@example.com 或 顯示名稱 <name@example.com>";
+  if (error === "EMAIL_NOTIFICATIONS_DISABLED") return "後台已停用確認電郵";
+  return error || "未能發送確認電郵";
+}
+
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string; registrationId: string }> }) {
   try {
     await assertAdminForApi();
@@ -27,7 +34,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const event = registration.event as EventRecord;
     const result = await sendRegistrationEmail(registration, event, { idempotencyKey: `registration/${registration.id}/resend/${Date.now()}` });
     await admin.from("registrations").update({ email_sent: result.sent, email_error: result.error || null }).eq("id", registration.id);
-    if (!result.sent) return NextResponse.json({ error: result.error === "RESEND_NOT_CONFIGURED" ? "Vercel 尚未設定 RESEND_API_KEY 或 RESEND_FROM_EMAIL" : result.error || "未能發送確認電郵" }, { status: 502 });
+    if (!result.sent) return NextResponse.json({ error: emailErrorMessage(result.error) }, { status: 502 });
     return NextResponse.json({ sent: true });
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") return NextResponse.json({ error: "未獲授權" }, { status: 401 });

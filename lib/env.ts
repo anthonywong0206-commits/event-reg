@@ -10,12 +10,20 @@ export function isServiceRoleConfigured(): boolean {
 }
 
 export function appUrl(): string {
+  const deploymentUrl = process.env.VERCEL_URL?.replace(/\/$/, "");
+
+  // Preview QR codes must point back to the exact Preview deployment, even when
+  // NEXT_PUBLIC_APP_URL is set to the production domain at project level.
+  if (process.env.VERCEL_ENV === "preview" && deploymentUrl) {
+    return `https://${deploymentUrl}`;
+  }
+
   const configured = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
   if (configured) return configured;
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
     return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   }
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  if (deploymentUrl) return `https://${deploymentUrl}`;
   return "http://localhost:3000";
 }
 

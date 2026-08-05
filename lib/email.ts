@@ -34,6 +34,12 @@ function textToHtml(value: string): string {
   return escapeHtml(value).replaceAll("\n", "<br />");
 }
 
+function isValidSender(value: string): boolean {
+  const bracketedAddress = value.match(/<([^<>]+)>\s*$/)?.[1];
+  const address = (bracketedAddress ?? value).trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address);
+}
+
 export async function sendRegistrationEmail(
   registration: RegistrationRecord,
   event: EventRecord,
@@ -48,6 +54,7 @@ export async function sendRegistrationEmail(
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const from = process.env.RESEND_FROM_EMAIL?.trim();
   if (!apiKey || !from) return { sent: false, error: "RESEND_NOT_CONFIGURED" };
+  if (!isValidSender(from)) return { sent: false, error: "RESEND_FROM_EMAIL_INVALID" };
 
   try {
     const resend = new Resend(apiKey);

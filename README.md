@@ -109,6 +109,10 @@ RESEND_API_KEY=re_xxx
 RESEND_FROM_EMAIL=活動報名平台 <events@your-domain.com>
 ```
 
+正式發送前，`RESEND_FROM_EMAIL` 的 `@` 後網域必須已在 Resend 完成驗證。首次測試可暫用 `Event Registration <onboarding@resend.dev>`，但 Resend 只容許它寄到該 Resend 帳戶本身的電郵地址；要寄給所有活動參加者，必須改用已驗證的自訂網域。
+
+Vercel Preview deployment 產生 QR Code 時會優先使用該次部署的 `VERCEL_URL`；Production 則使用 `NEXT_PUBLIC_APP_URL`，避免 Preview QR Code 誤指向正式網站。
+
 未設定 Resend 時，報名仍會成功，QR Code 亦會顯示在成功頁；資料庫的 `email_sent` 會記錄為 `false`，方便管理員跟進。
 
 
