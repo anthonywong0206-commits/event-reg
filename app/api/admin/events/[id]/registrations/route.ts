@@ -89,7 +89,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     let emailSent = false;
     let emailError: string | null = null;
-    if (parsed.data.sendEmail && registration.status === "confirmed") {
+    if (parsed.data.sendEmail && registration.status === "confirmed" && registration.email) {
+      if (registration.session_id) {
+        const { data: session } = await admin.from("event_sessions").select("*").eq("id", registration.session_id).maybeSingle();
+        registration.session = session || null;
+      }
       registration.event = event;
       const emailResult = await sendRegistrationEmail(registration, event);
       delete registration.event;

@@ -74,6 +74,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
 
       if (row.sendEmail && row.email && row.status === "confirmed") {
+        registration.session = event.sessions?.find((session) => session.id === registration?.session_id) || null;
         registration.event = event;
         const emailResult = await sendRegistrationEmail(registration, event);
         delete registration.event;

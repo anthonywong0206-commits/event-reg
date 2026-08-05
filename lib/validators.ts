@@ -134,3 +134,12 @@ export const telegramSettingsSchema = z.object({
   frequency: z.enum(["instant", "3h", "12h", "daily"]),
   chatId: z.string().trim().max(80).optional().default(""),
 });
+
+export const emailNotificationSettingsSchema = z.object({
+  enabled: z.boolean(),
+  template_key: z.enum(["standard", "friendly", "concise", "custom"]),
+  subject_template: z.string().trim().min(2, "請輸入電郵主旨").max(300),
+  body_template: z.string().trim().min(10, "請輸入電郵內容").max(6000),
+  include_qr: z.boolean(),
+  reply_to: optionalEmailSchema,
+});

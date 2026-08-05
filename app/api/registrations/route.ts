@@ -67,9 +67,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: known ? errorMessages[known] : "未能完成報名，請稍後再試。" }, { status: (known === "EVENT_FULL" || known === "SESSION_FULL") || known === "REGISTRATION_NOT_STARTED" || known === "REGISTRATION_CLOSED" ? 409 : 400 });
     }
 
-    const registration = data as RegistrationRecord;
+    let registration = data as RegistrationRecord;
+    const { data: fullRegistration } = await admin
+      .from("registrations")
+      .select("*, session:event_sessions(*)")
+      .eq("id", registration.id)
+      .maybeSingle();
+    if (fullRegistration) registration = fullRegistration as RegistrationRecord;
     registration.event = event;
-    const emailResult = await sendRegistrationEmail(registration, event);
+    const emailResult = registration.email
+      ? await sendRegistrationEmail(registration, event)
+      : { sent: false, skipped: true };
 
     await admin
       .from("registrations")

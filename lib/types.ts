@@ -118,3 +118,18 @@ export interface TelegramNotificationQueueRecord {
   created_at: string;
 }
 
+
+export type EmailTemplateKey = "standard" | "friendly" | "concise" | "custom";
+
+export interface EmailNotificationSettingsRecord {
+  setting_key: "registration_confirmation";
+  enabled: boolean;
+  template_key: EmailTemplateKey;
+  subject_template: string;
+  body_template: string;
+  include_qr: boolean;
+  reply_to: string | null;
+  updated_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}

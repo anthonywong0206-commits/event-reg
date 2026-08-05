@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Bot, CalendarPlus, CalendarRange, CheckCircle2, ClipboardList, Clock3, Edit3, ExternalLink, ImageIcon, QrCode, UsersRound } from "lucide-react";
+import { Bot, CalendarPlus, CalendarRange, CheckCircle2, ClipboardList, Clock3, Edit3, ExternalLink, ImageIcon, MailCheck, QrCode, UsersRound } from "lucide-react";
 import { EventImage } from "@/components/event-image";
 import { requireAdmin } from "@/lib/auth";
 import { getAllEventsForAdmin } from "@/lib/data";
@@ -19,10 +19,10 @@ export default async function AdminDashboardPage() {
   return (
     <main className="admin-dashboard">
       <header className="admin-header">
-        <div className="admin-shell admin-header-inner"><Link href="/admin" className="admin-brand"><span className="brand-mark"><CalendarRange /></span><span><strong>Event Register</strong><small>管理後台</small></span></Link><nav><Link href="/admin/telegram"><Bot />Telegram 通知</Link><Link href="/admin/site-settings"><ImageIcon />首頁橫額</Link><Link href="/" target="_blank"><ExternalLink />查看網站</Link><Link href="/check-in"><QrCode />現場登記</Link><SignOutButton /></nav></div>
+        <div className="admin-shell admin-header-inner"><Link href="/admin" className="admin-brand"><span className="brand-mark"><CalendarRange /></span><span><strong>Event Register</strong><small>管理後台</small></span></Link><nav><Link href="/admin/email-settings"><MailCheck />確認電郵</Link><Link href="/admin/telegram"><Bot />Telegram 通知</Link><Link href="/admin/site-settings"><ImageIcon />首頁橫額</Link><Link href="/" target="_blank"><ExternalLink />查看網站</Link><Link href="/check-in"><QrCode />現場登記</Link><SignOutButton /></nav></div>
       </header>
       <div className="admin-shell admin-content">
-        <div className="admin-welcome"><div><p>歡迎回來，{profile.display_name || "管理員"}</p><h1>活動管理總覽</h1></div><div className="admin-welcome-actions"><Link className="button button-secondary button-large" href="/admin/telegram"><Bot />Telegram 通知</Link><Link className="button button-secondary button-large" href="/admin/site-settings"><ImageIcon />首頁橫額設定</Link><Link className="button button-secondary button-large" href="/admin/events/new/multi"><CalendarRange />建立多時段活動</Link><Link className="button button-primary button-large" href="/admin/events/new"><CalendarPlus />建立新活動</Link></div></div>
+        <div className="admin-welcome"><div><p>歡迎回來，{profile.display_name || "管理員"}</p><h1>活動管理總覽</h1></div><div className="admin-welcome-actions"><Link className="button button-secondary button-large" href="/admin/email-settings"><MailCheck />確認電郵設定</Link><Link className="button button-secondary button-large" href="/admin/telegram"><Bot />Telegram 通知</Link><Link className="button button-secondary button-large" href="/admin/site-settings"><ImageIcon />首頁橫額設定</Link><Link className="button button-secondary button-large" href="/admin/events/new/multi"><CalendarRange />建立多時段活動</Link><Link className="button button-primary button-large" href="/admin/events/new"><CalendarPlus />建立新活動</Link></div></div>
         <section className="stat-grid">
           <article><span><CalendarRange /></span><div><strong>{events.length}</strong><small>活動總數</small></div></article>
           <article><span><CheckCircle2 /></span><div><strong>{openEvents}</strong><small>接受報名中</small></div></article>
