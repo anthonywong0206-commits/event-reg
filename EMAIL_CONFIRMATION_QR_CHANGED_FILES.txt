@@ -1,0 +1,15 @@
+lib/email.ts
+lib/email-settings.ts
+lib/types.ts
+lib/validators.ts
+app/admin/email-settings/page.tsx
+components/admin-email-settings-form.tsx
+app/api/admin/email-settings/route.ts
+app/api/admin/events/[id]/registrations/[registrationId]/email/route.ts
+app/api/registrations/route.ts
+app/api/admin/events/[id]/registrations/route.ts
+app/api/admin/events/[id]/registrations/import/route.ts
+components/admin-registration-manager.tsx
+app/admin/page.tsx
+app/globals.css
+supabase/migrations/202608050002_add_email_notification_settings.sql
