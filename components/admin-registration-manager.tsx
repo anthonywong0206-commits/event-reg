@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, LoaderCircle, Mail, Pencil, Phone, Plus, Save, Trash2, UsersRound, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, LoaderCircle, Mail, Pencil, Phone, Plus, Save, Send, Trash2, UsersRound, X } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import type { RegistrationMethod, RegistrationRecord, RegistrationStatus } from "@/lib/types";
 
@@ -56,6 +56,7 @@ export function AdminRegistrationManager({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState("");
+  const [emailingId, setEmailingId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -134,6 +135,26 @@ export function AdminRegistrationManager({
     }
   }
 
+  async function resendEmail(registration: RegistrationRecord) {
+    setEmailingId(registration.id);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(
+        `/api/admin/events/${eventId}/registrations/${registration.id}/email`,
+        { method: "POST" },
+      );
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "未能發送確認電郵");
+      setNotice(`確認電郵已發送至 ${registration.email}。`);
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "未能發送確認電郵");
+    } finally {
+      setEmailingId("");
+    }
+  }
+
   return (
     <section className="registration-list-panel">
       <div className="registration-list-toolbar">
@@ -164,6 +185,9 @@ export function AdminRegistrationManager({
                   <td>{registration.attended_at ? <span className="attendance-chip attended"><CheckCircle2 />已出席<small>{formatDateTime(registration.attended_at)}</small></span> : <span className="attendance-chip pending">未登記</span>}</td>
                   <td>
                     <div className="registration-row-actions">
+                      <button type="button" className="icon-button" aria-label={`重發確認電郵 ${registration.full_name}`} disabled={emailingId === registration.id} onClick={() => resendEmail(registration)}>
+                        {emailingId === registration.id ? <LoaderCircle className="spin" /> : <Send />}
+                      </button>
                       <button type="button" className="icon-button" aria-label={`編輯 ${registration.full_name}`} onClick={() => openEdit(registration)}><Pencil /></button>
                       <button type="button" className="icon-button danger" aria-label={`刪除 ${registration.full_name}`} disabled={deletingId === registration.id} onClick={() => remove(registration)}>
                         {deletingId === registration.id ? <LoaderCircle className="spin" /> : <Trash2 />}

@@ -15,10 +15,12 @@ function escapeHtml(value: string): string {
 export async function sendRegistrationEmail(
   registration: RegistrationRecord,
   event: EventRecord,
+  options: { idempotencyKey?: string } = {},
 ): Promise<{ sent: boolean; error?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL;
-  if (!apiKey || !from) return { sent: false, error: "RESEND_NOT_CONFIGURED" };
+  if (!apiKey) return { sent: false, error: "RESEND_API_KEY_MISSING" };
+  if (!from) return { sent: false, error: "RESEND_FROM_EMAIL_MISSING" };
 
   try {
     const resend = new Resend(apiKey);
@@ -64,9 +66,7 @@ export async function sendRegistrationEmail(
           },
         ],
       },
-      {
-        idempotencyKey: `registration/${registration.id}`,
-      },
+      { idempotencyKey: options.idempotencyKey || `registration/${registration.id}` },
     );
 
     if (error) return { sent: false, error: error.message };
