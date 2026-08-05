@@ -280,3 +280,7 @@ CRON_SECRET=與 Vercel Production 完全相同的隨機字串
 ## Optional participant email
 
 Participant email is optional for both public registration and administrator-managed participant records. When no email is provided, the success page still displays a downloadable QR admission credential, but no confirmation email is sent. Existing deployments must apply `supabase/migrations/202608040004_make_registration_email_optional.sql`.
+
+## 多日期／多時段活動
+
+最新版本支援管理員於 `/admin/events/new/multi` 建立多日期、多時段活動。每個時段有獨立名額；參加者報名時選擇指定時段，管理員可在報名名單拖放參加者至其他時段。部署此版本前須套用 `202608050001_add_multi_session_events.sql`。
