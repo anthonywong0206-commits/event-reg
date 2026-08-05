@@ -1,0 +1,4 @@
+components/event-image.tsx
+app/events/[slug]/page.tsx
+app/events/[slug]/register/page.tsx
+UPDATE_A4_POSTER_DISPLAY_FIX.md
