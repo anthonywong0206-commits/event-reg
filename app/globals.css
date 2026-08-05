@@ -195,8 +195,8 @@ svg { width: 1.05em; height: 1.05em; flex: 0 0 auto; }
 .breadcrumb a, .back-link { display: inline-flex; align-items: center; gap: 7px; color: var(--blue); font-weight: 700; }
 .event-detail-page { background: #fbfcfe; }
 .event-detail-hero { display: grid; grid-template-columns: minmax(280px, .72fr) minmax(0, 1.55fr); gap: 38px; padding-top: 24px; padding-bottom: 62px; }
-.detail-poster { position: relative; min-height: 700px; border-radius: 19px; overflow: hidden; box-shadow: var(--shadow-lg); background: #dce8f6; }
-.detail-poster img { object-fit: cover; }
+.detail-poster { position: relative; min-height: 700px; border-radius: 19px; overflow: hidden; box-shadow: var(--shadow-lg); background: #f4f6f8; }
+.detail-poster img { object-fit: contain; object-position: center; }
 .detail-content { background: #fff; padding: 42px 44px; border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow-sm); }
 .detail-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .detail-title-row h1 { margin: 12px 0 0; font-family: Georgia, "Noto Serif TC", serif; font-size: clamp(36px, 4vw, 53px); line-height: 1.18; letter-spacing: -.045em; }
@@ -269,8 +269,8 @@ svg { width: 1.05em; height: 1.05em; flex: 0 0 auto; }
 .form-submit-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 8px; }
 .privacy-note { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
 .register-summary-card { position: sticky; top: 100px; padding: 17px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: var(--shadow-sm); }
-.summary-poster { position: relative; aspect-ratio: 1.4 / 1; overflow: hidden; margin-bottom: 16px; border-radius: 12px; background: #e8eef5; }
-.summary-poster img { object-fit: cover; }
+.summary-poster { position: relative; aspect-ratio: 1.4 / 1; overflow: hidden; margin-bottom: 16px; border-radius: 12px; background: #f4f6f8; }
+.summary-poster img { object-fit: contain; object-position: center; }
 .register-summary-card h2 { margin: 11px 0 16px; font-size: 20px; line-height: 1.4; }
 .register-summary-card ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 11px; color: var(--muted); font-size: 12px; }
 .register-summary-card li { display: flex; align-items: flex-start; gap: 9px; }
