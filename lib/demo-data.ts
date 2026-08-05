@@ -25,6 +25,8 @@ export const DEMO_EVENTS: EventRecord[] = [
     contact_name: "活動服務處",
     contact_phone: "2345 6789",
     contact_address: "社區中心地下服務櫃台",
+    is_multi_session: false,
+    sessions: [],
     is_featured: true,
   },
   {
@@ -51,6 +53,8 @@ export const DEMO_EVENTS: EventRecord[] = [
     contact_name: "課程統籌",
     contact_phone: "2345 6801",
     contact_address: null,
+    is_multi_session: false,
+    sessions: [],
     is_featured: true,
   },
   {
@@ -77,6 +81,8 @@ export const DEMO_EVENTS: EventRecord[] = [
     contact_name: "戶外活動組",
     contact_phone: "2345 6812",
     contact_address: "社區中心一樓詢問處",
+    is_multi_session: false,
+    sessions: [],
     is_featured: true,
   },
   {
@@ -102,6 +108,8 @@ export const DEMO_EVENTS: EventRecord[] = [
     contact_name: "活動服務處",
     contact_phone: "2345 6789",
     contact_address: null,
+    is_multi_session: false,
+    sessions: [],
     is_featured: false,
   },
   {
@@ -127,6 +135,8 @@ export const DEMO_EVENTS: EventRecord[] = [
     contact_name: "興趣班組",
     contact_phone: "2345 6823",
     contact_address: "社區中心地下服務櫃台",
+    is_multi_session: false,
+    sessions: [],
     is_featured: false,
   },
   {
@@ -152,6 +162,8 @@ export const DEMO_EVENTS: EventRecord[] = [
     contact_name: "義工服務組",
     contact_phone: "2345 6834",
     contact_address: null,
+    is_multi_session: false,
+    sessions: [],
     is_featured: false,
   },
 ];
@@ -159,6 +171,8 @@ export const DEMO_EVENTS: EventRecord[] = [
 export const DEMO_REGISTRATION: RegistrationRecord = {
   id: "7ddf71c5-83aa-4f45-87a1-b0dd98cd0001",
   event_id: DEMO_EVENTS[0].id,
+  session_id: null,
+  session: null,
   registration_no: "ER20261017001",
   full_name: "示範參加者",
   email: "demo@example.com",

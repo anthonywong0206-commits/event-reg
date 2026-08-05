@@ -12,6 +12,7 @@ const optionalEmailSchema = z.preprocess(
 
 export const registrationSchema = z.object({
   eventId: z.uuid("活動資料無效"),
+  sessionId: z.uuid("請選擇有效活動時段").nullable().optional(),
   fullName: z.string().trim().min(2, "請輸入姓名").max(80),
   email: optionalEmailSchema,
   phone: z.string().trim().min(8, "請輸入聯絡電話").max(30),
@@ -20,6 +21,16 @@ export const registrationSchema = z.object({
   consent: z.literal(true, { error: "請同意個人資料收集聲明" }),
   website: z.string().max(0).optional().default(""),
 });
+
+const eventSessionSchema = z.object({
+  id: z.uuid().optional(),
+  session_date: z.string().min(10),
+  start_at: z.iso.datetime(),
+  end_at: z.iso.datetime(),
+  capacity: z.coerce.number().int().min(1).max(100000),
+  sort_order: z.coerce.number().int().min(0).default(0),
+  is_active: z.boolean().default(true),
+}).refine((data) => new Date(data.end_at) > new Date(data.start_at), { message: "時段結束時間必須遲於開始時間", path: ["end_at"] });
 
 export const eventSchema = z
   .object({
@@ -49,6 +60,8 @@ export const eventSchema = z
     contact_phone: z.string().trim().max(50).nullable().optional(),
     contact_address: z.string().trim().max(300).nullable().optional(),
     is_featured: z.boolean().default(false),
+    is_multi_session: z.boolean().default(false),
+    sessions: z.array(eventSessionSchema).optional().default([]),
   })
   .refine((data) => new Date(data.end_at) > new Date(data.start_at), {
     message: "活動結束時間必須遲於開始時間",
@@ -58,8 +71,16 @@ export const eventSchema = z
     message: "開始報名時間必須早於或等於截止報名時間",
     path: ["registration_start_at"],
   })
-  .refine((data) => new Date(data.registration_deadline) <= new Date(data.start_at), {
+  .refine((data) => !data.is_multi_session || data.sessions.length > 0, {
+    message: "多時段活動最少需要一個日期及時段",
+    path: ["sessions"],
+  })
+  .refine((data) => data.is_multi_session || new Date(data.registration_deadline) <= new Date(data.start_at), {
     message: "截止報名時間必須早於或等於活動開始時間",
+    path: ["registration_deadline"],
+  })
+  .refine((data) => !data.is_multi_session || data.sessions.every((session) => new Date(data.registration_deadline) <= new Date(session.start_at)), {
+    message: "截止報名時間必須早於所有活動時段",
     path: ["registration_deadline"],
   });
 
@@ -83,6 +104,7 @@ const adminRegistrationFields = {
   status: z.enum(["confirmed", "cancelled", "waitlist"]),
   notes: z.string().trim().max(500).optional().default(""),
   attended: z.boolean().optional().default(false),
+  sessionId: z.uuid("請選擇有效活動時段").nullable().optional(),
 };
 
 export const adminRegistrationCreateSchema = z

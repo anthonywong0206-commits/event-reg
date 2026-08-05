@@ -61,3 +61,13 @@ export function eventRegistrationState(event: EventRecord): EventRegistrationSta
   if (isRegistrationClosed(event)) return "closed";
   return "open";
 }
+
+export type CapacitySignal = "open" | "popular" | "limited" | "full";
+export function capacitySignal(event: EventRecord): { key: CapacitySignal; label: string } {
+  const capacity = Math.max(1, event.capacity);
+  const ratio = remainingSeats(event) / capacity;
+  if (ratio <= 0) return { key: "full", label: "名額已滿" };
+  if (ratio <= 0.19) return { key: "limited", label: "尚餘少量" };
+  if (ratio <= 0.49) return { key: "popular", label: "反應熱烈" };
+  return { key: "open", label: "開放報名" };
+}

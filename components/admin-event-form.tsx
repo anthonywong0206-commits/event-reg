@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Clock3, ImageUp, LoaderCircle, Save, Trash2, Zap } from "lucide-react";
-import type { EventRecord, RegistrationMethod } from "@/lib/types";
+import { AlertCircle, CalendarPlus, Clock3, ImageUp, LoaderCircle, Plus, Save, Trash2, Zap } from "lucide-react";
+import type { EventRecord, EventSessionRecord, RegistrationMethod } from "@/lib/types";
 
 function localInput(value?: string | null) {
   if (!value) return "";
@@ -12,7 +12,15 @@ function localInput(value?: string | null) {
   return date.toISOString().slice(0, 16);
 }
 
-export function AdminEventForm({ event }: { event?: EventRecord | null }) {
+type SessionDraft = Pick<EventSessionRecord, "id" | "session_date" | "start_at" | "end_at" | "capacity" | "sort_order" | "is_active">;
+
+function defaultSession(): SessionDraft {
+  const start = new Date(); start.setDate(start.getDate() + 14); start.setHours(10, 0, 0, 0);
+  const end = new Date(start); end.setHours(12, 0, 0, 0);
+  return { id: crypto.randomUUID(), session_date: start.toISOString().slice(0,10), start_at: start.toISOString(), end_at: end.toISOString(), capacity: 20, sort_order: 0, is_active: true };
+}
+
+export function AdminEventForm({ event, forceMulti = false }: { event?: EventRecord | null; forceMulti?: boolean }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -20,9 +28,33 @@ export function AdminEventForm({ event }: { event?: EventRecord | null }) {
   const [posterUrl, setPosterUrl] = useState(event?.poster_image_url || "/images/ocean-poster.jpg");
   const [heroUrl, setHeroUrl] = useState(event?.hero_image_url || "/images/hero-community.jpg");
   const [methods, setMethods] = useState<RegistrationMethod[]>(event?.registration_methods || ["online", "in_person"]);
+  const isMulti = forceMulti || Boolean(event?.is_multi_session);
+  const [sessions, setSessions] = useState<SessionDraft[]>(event?.sessions?.length ? event.sessions.map((item) => ({ ...item })) : isMulti ? [defaultSession()] : []);
+  const totalSessionCapacity = useMemo(() => sessions.reduce((sum, item) => sum + Number(item.capacity || 0), 0), [sessions]);
   const [registrationStartMode, setRegistrationStartMode] = useState<"immediate" | "scheduled">(
     event && new Date(event.registration_start_at).getTime() > Date.now() ? "scheduled" : "immediate",
   );
+
+
+  function addSession() {
+    const next = defaultSession();
+    const previous = sessions.at(-1);
+    if (previous) {
+      const start = new Date(previous.start_at); start.setHours(start.getHours() + 3);
+      const end = new Date(start); end.setHours(end.getHours() + 2);
+      next.session_date = start.toISOString().slice(0, 10);
+      next.start_at = start.toISOString(); next.end_at = end.toISOString();
+    }
+    setSessions((current) => [...current, { ...next, sort_order: current.length }]);
+  }
+
+  function updateSession(index: number, patch: Partial<SessionDraft>) {
+    setSessions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  }
+
+  function removeSession(index: number) {
+    setSessions((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
 
   function toggleMethod(method: RegistrationMethod) {
     setMethods((current) => current.includes(method) ? current.filter((item) => item !== method) : [...current, method]);
@@ -52,6 +84,18 @@ export function AdminEventForm({ event }: { event?: EventRecord | null }) {
     setError("");
     const form = new FormData(formEvent.currentTarget);
     const value = (name: string) => String(form.get(name) || "").trim();
+    if (isMulti && sessions.length === 0) { setError("請最少建立一個活動時段"); setSaving(false); return; }
+    const normalizedSessions = sessions.map((session, index) => ({
+      ...(event?.sessions?.some((item) => item.id === session.id) ? { id: session.id } : {}),
+      session_date: session.session_date,
+      start_at: new Date(session.start_at).toISOString(),
+      end_at: new Date(session.end_at).toISOString(),
+      capacity: Number(session.capacity),
+      sort_order: index,
+      is_active: session.is_active,
+    }));
+    const sortedStarts = normalizedSessions.map((item) => item.start_at).sort();
+    const sortedEnds = normalizedSessions.map((item) => item.end_at).sort();
     const payload = {
       title: value("title"),
       slug: value("slug"),
@@ -61,15 +105,15 @@ export function AdminEventForm({ event }: { event?: EventRecord | null }) {
       category: value("category"),
       location: value("location"),
       address: value("address") || null,
-      start_at: new Date(value("start_at")).toISOString(),
-      end_at: new Date(value("end_at")).toISOString(),
+      start_at: isMulti ? sortedStarts[0] : new Date(value("start_at")).toISOString(),
+      end_at: isMulti ? sortedEnds.at(-1)! : new Date(value("end_at")).toISOString(),
       registration_start_at: registrationStartMode === "immediate"
         ? event?.registration_start_at && new Date(event.registration_start_at).getTime() <= Date.now()
           ? event.registration_start_at
           : new Date().toISOString()
         : new Date(value("registration_start_at")).toISOString(),
       registration_deadline: new Date(value("registration_deadline")).toISOString(),
-      capacity: Number(form.get("capacity")),
+      capacity: isMulti ? totalSessionCapacity : Number(form.get("capacity")),
       status: value("status"),
       registration_methods: methods,
       hero_image_url: heroUrl,
@@ -78,6 +122,8 @@ export function AdminEventForm({ event }: { event?: EventRecord | null }) {
       contact_phone: value("contact_phone") || null,
       contact_address: value("contact_address") || null,
       is_featured: form.get("is_featured") === "on",
+      is_multi_session: isMulti,
+      sessions: normalizedSessions,
     };
 
     try {
@@ -131,8 +177,8 @@ export function AdminEventForm({ event }: { event?: EventRecord | null }) {
       <section className="admin-form-section">
         <div className="section-heading"><h2>日期、地點及名額</h2><span>系統會按開始時間、名額與截止時間自動控制報名</span></div>
         <div className="form-grid">
-          <label className="field"><span>活動開始時間 *</span><input name="start_at" type="datetime-local" required defaultValue={localInput(event?.start_at)} /></label>
-          <label className="field"><span>活動結束時間 *</span><input name="end_at" type="datetime-local" required defaultValue={localInput(event?.end_at)} /></label>
+          {!isMulti && <><label className="field"><span>活動開始時間 *</span><input name="start_at" type="datetime-local" required defaultValue={localInput(event?.start_at)} /></label>
+          <label className="field"><span>活動結束時間 *</span><input name="end_at" type="datetime-local" required defaultValue={localInput(event?.end_at)} /></label></>}
           <div className="field field-full">
             <span>開始報名日期 *</span>
             <div className="registration-start-options" role="radiogroup" aria-label="選擇開始報名方式">
@@ -148,11 +194,28 @@ export function AdminEventForm({ event }: { event?: EventRecord | null }) {
           </div>
           <label className="field"><span>指定開始報名時間</span><input name="registration_start_at" type="datetime-local" required={registrationStartMode === "scheduled"} disabled={registrationStartMode === "immediate"} defaultValue={localInput(event?.registration_start_at)} /></label>
           <label className="field"><span>截止報名時間 *</span><input name="registration_deadline" type="datetime-local" required defaultValue={localInput(event?.registration_deadline)} /></label>
-          <label className="field"><span>人數上限 *</span><input name="capacity" type="number" min={1} required defaultValue={event?.capacity || 50} /></label>
+          {!isMulti && <label className="field"><span>人數上限 *</span><input name="capacity" type="number" min={1} required defaultValue={event?.capacity || 50} /></label>}
+          {isMulti && <div className="field"><span>全部時段總名額</span><strong className="session-capacity-total">{totalSessionCapacity} 人</strong></div>}
           <label className="field"><span>活動地點 *</span><input name="location" required defaultValue={event?.location} /></label>
           <label className="field"><span>完整地址</span><input name="address" defaultValue={event?.address || ""} /></label>
         </div>
       </section>
+
+      {isMulti && <section className="admin-form-section multi-session-builder">
+        <div className="section-heading"><div><h2>活動日期及時段</h2><span>每個日期可建立多個時段，各自設定名額上限</span></div><button type="button" className="button button-secondary button-small" onClick={addSession}><Plus />新增時段</button></div>
+        <div className="session-editor-list">
+          {sessions.map((session, index) => <article className="session-editor-card" key={session.id || index}>
+            <header><span><CalendarPlus />時段 {index + 1}</span><button type="button" className="icon-button danger" onClick={() => removeSession(index)} disabled={sessions.length === 1}><Trash2 /></button></header>
+            <div className="form-grid">
+              <label className="field"><span>日期 *</span><input type="date" value={session.session_date} onChange={(e) => { const date=e.target.value; const start=new Date(session.start_at); const end=new Date(session.end_at); const [y,m,d]=date.split('-').map(Number); start.setFullYear(y,m-1,d); end.setFullYear(y,m-1,d); updateSession(index,{session_date:date,start_at:start.toISOString(),end_at:end.toISOString()}); }} required /></label>
+              <label className="field"><span>開始時間 *</span><input type="time" value={localInput(session.start_at).slice(11,16)} onChange={(e) => { const date=new Date(session.start_at); const [h,m]=e.target.value.split(':').map(Number); date.setHours(h,m,0,0); updateSession(index,{start_at:date.toISOString()}); }} required /></label>
+              <label className="field"><span>結束時間 *</span><input type="time" value={localInput(session.end_at).slice(11,16)} onChange={(e) => { const date=new Date(session.end_at); const [h,m]=e.target.value.split(':').map(Number); date.setHours(h,m,0,0); updateSession(index,{end_at:date.toISOString()}); }} required /></label>
+              <label className="field"><span>人數上限 *</span><input type="number" min={1} value={session.capacity} onChange={(e) => updateSession(index,{capacity:Number(e.target.value)})} required /></label>
+              <label className="field checkbox-field"><input type="checkbox" checked={session.is_active} onChange={(e) => updateSession(index,{is_active:e.target.checked})} /><span>開放此時段</span></label>
+            </div>
+          </article>)}
+        </div>
+      </section>}
 
       <section className="admin-form-section">
         <div className="section-heading"><h2>報名方法與聯絡資料</h2><span>最少選擇一種報名方法</span></div>

@@ -2,7 +2,7 @@ import { EventImage } from "@/components/event-image";
 import Link from "next/link";
 import { CalendarDays, MapPin, UsersRound } from "lucide-react";
 import type { EventRecord } from "@/lib/types";
-import { formatEventDate, remainingSeats } from "@/lib/format";
+import { capacitySignal, formatEventDate, remainingSeats } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
 
 export function EventCard({ event, size = "regular" }: { event: EventRecord; size?: "large" | "regular" | "wide" }) {
@@ -21,7 +21,7 @@ export function EventCard({ event, size = "regular" }: { event: EventRecord; siz
         <div className="event-meta">
           <span><CalendarDays />{formatEventDate(event)}</span>
           <span><MapPin />{event.location}</span>
-          <span><UsersRound />{event.confirmed_count} / {event.capacity} 人已報名，尚餘 {remainingSeats(event)} 位</span>
+          <span><UsersRound />{event.is_multi_session ? <b className={`capacity-signal ${capacitySignal(event).key}`}>{capacitySignal(event).label}</b> : <>{event.confirmed_count} / {event.capacity} 人已報名，尚餘 {remainingSeats(event)} 位</>}</span>
         </div>
       </div>
     </article>

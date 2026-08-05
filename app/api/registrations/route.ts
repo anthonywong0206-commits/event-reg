@@ -15,6 +15,10 @@ const errorMessages: Record<string, string> = {
   REGISTRATION_NOT_STARTED: "活動尚未開始報名。",
   REGISTRATION_CLOSED: "活動報名已截止。",
   EVENT_FULL: "活動名額已滿。",
+  SESSION_REQUIRED: "請選擇活動日期及時段。",
+  SESSION_NOT_FOUND: "找不到所選活動時段。",
+  SESSION_NOT_ACTIVE: "所選時段已停止報名。",
+  SESSION_FULL: "所選時段名額已滿。",
   METHOD_NOT_ALLOWED: "此活動不支援所選報名方法。",
   ALREADY_REGISTERED: "此電郵已登記此活動。如需更改資料，請聯絡主辦單位。",
 };
@@ -50,6 +54,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await admin.rpc("register_for_event", {
       p_event_id: parsed.data.eventId,
+      p_session_id: parsed.data.sessionId ?? null,
       p_full_name: parsed.data.fullName,
       p_email: parsed.data.email?.toLowerCase() ?? null,
       p_phone: parsed.data.phone,
@@ -59,7 +64,7 @@ export async function POST(request: Request) {
 
     if (error) {
       const known = Object.keys(errorMessages).find((code) => error.message.includes(code));
-      return NextResponse.json({ error: known ? errorMessages[known] : "未能完成報名，請稍後再試。" }, { status: known === "EVENT_FULL" || known === "REGISTRATION_NOT_STARTED" || known === "REGISTRATION_CLOSED" ? 409 : 400 });
+      return NextResponse.json({ error: known ? errorMessages[known] : "未能完成報名，請稍後再試。" }, { status: (known === "EVENT_FULL" || known === "SESSION_FULL") || known === "REGISTRATION_NOT_STARTED" || known === "REGISTRATION_CLOSED" ? 409 : 400 });
     }
 
     const registration = data as RegistrationRecord;

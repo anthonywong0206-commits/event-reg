@@ -11,14 +11,35 @@ export async function POST(request: Request) {
     const parsed = eventSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "活動資料不完整" }, { status: 400 });
     const admin = createAdminClient();
-    const { data, error } = await admin.from("events").insert({ ...parsed.data, created_by: user.id }).select("*").single();
+    const { sessions, ...eventPayload } = parsed.data;
+    const firstStart = sessions.length ? sessions.map((item) => item.start_at).sort()[0] : eventPayload.start_at;
+    const lastEnd = sessions.length ? sessions.map((item) => item.end_at).sort().at(-1)! : eventPayload.end_at;
+    const totalCapacity = eventPayload.is_multi_session ? sessions.reduce((sum, item) => sum + item.capacity, 0) : eventPayload.capacity;
+    const { data, error } = await admin.from("events").insert({
+      ...eventPayload,
+      start_at: firstStart,
+      end_at: lastEnd,
+      capacity: totalCapacity,
+      created_by: user.id,
+    }).select("*").single();
     if (error) {
       if (error.code === "23505") return NextResponse.json({ error: "此活動網址 Slug 已被使用" }, { status: 409 });
-      if (error.code === "PGRST204" && error.message?.includes("registration_start_at")) {
-        return NextResponse.json({ error: "資料庫尚未完成『開始報名日期』更新，請先套用 Supabase Migration：202608040001_add_registration_start_at.sql" }, { status: 503 });
-      }
-      if (error.code === "23514") return NextResponse.json({ error: "開始報名時間必須早於或等於截止報名時間" }, { status: 400 });
       throw error;
+    }
+    if (eventPayload.is_multi_session) {
+      const { error: sessionError } = await admin.from("event_sessions").insert(sessions.map((session, index) => ({
+        event_id: data.id,
+        session_date: session.session_date,
+        start_at: session.start_at,
+        end_at: session.end_at,
+        capacity: session.capacity,
+        sort_order: index,
+        is_active: session.is_active,
+      })));
+      if (sessionError) {
+        await admin.from("events").delete().eq("id", data.id);
+        throw sessionError;
+      }
     }
     return NextResponse.json(data, { status: 201 });
   } catch (error) {

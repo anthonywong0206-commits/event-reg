@@ -2,6 +2,20 @@ export type RegistrationMethod = "online" | "in_person";
 export type EventStatus = "draft" | "published" | "cancelled";
 export type RegistrationStatus = "confirmed" | "cancelled" | "waitlist";
 
+export interface EventSessionRecord {
+  id: string;
+  event_id: string;
+  session_date: string;
+  start_at: string;
+  end_at: string;
+  capacity: number;
+  confirmed_count: number;
+  sort_order: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface EventRecord {
   id: string;
   slug: string;
@@ -26,6 +40,8 @@ export interface EventRecord {
   contact_phone: string | null;
   contact_address: string | null;
   is_featured: boolean;
+  is_multi_session: boolean;
+  sessions?: EventSessionRecord[];
   created_at?: string;
   updated_at?: string;
 }
@@ -33,6 +49,8 @@ export interface EventRecord {
 export interface RegistrationRecord {
   id: string;
   event_id: string;
+  session_id: string | null;
+  session?: EventSessionRecord | null;
   registration_no: string;
   full_name: string;
   email: string | null;

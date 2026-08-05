@@ -21,6 +21,12 @@ export function registrationAdminError(error: {
   const message = error.message ?? "";
   const constraint = error.constraint ?? "";
 
+  if (message.includes("SESSION_FULL")) {
+    return { message: "所選時段名額已滿，請選擇其他時段或先增加該時段名額。", status: 409 };
+  }
+  if (message.includes("SESSION_NOT_FOUND") || message.includes("SESSION_NOT_ACTIVE")) {
+    return { message: "所選活動時段無效或已停止報名。", status: 400 };
+  }
   if (message.includes("EVENT_FULL")) {
     return { message: "活動名額已滿，未能加入已確認參加者。可改為候補或先增加活動名額。", status: 409 };
   }

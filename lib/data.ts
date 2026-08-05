@@ -11,7 +11,7 @@ export const getPublishedEvents = cache(async (): Promise<EventRecord[]> => {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("events")
-      .select("*")
+      .select("*, sessions:event_sessions(*)")
       .eq("status", "published")
       .order("start_at", { ascending: true });
     if (error) throw error;
@@ -30,7 +30,7 @@ export const getEventBySlug = cache(async (slug: string): Promise<EventRecord | 
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("events")
-      .select("*")
+      .select("*, sessions:event_sessions(*)")
       .eq("slug", slug)
       .eq("status", "published")
       .maybeSingle();
@@ -47,7 +47,7 @@ export async function getAllEventsForAdmin(): Promise<EventRecord[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("events")
-    .select("*")
+    .select("*, sessions:event_sessions(*)")
     .order("start_at", { ascending: true });
   if (error) throw error;
   return (data as EventRecord[]) ?? [];
@@ -58,7 +58,7 @@ export async function getEventForAdmin(id: string): Promise<EventRecord | null> 
     return DEMO_EVENTS.find((event) => event.id === id) ?? null;
   }
   const admin = createAdminClient();
-  const { data, error } = await admin.from("events").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await admin.from("events").select("*, sessions:event_sessions(*)").eq("id", id).maybeSingle();
   if (error) throw error;
   return (data as EventRecord | null) ?? null;
 }
@@ -70,7 +70,7 @@ export async function getRegistrationByToken(token: string): Promise<Registratio
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("registrations")
-    .select("*, event:events(*)")
+    .select("*, session:event_sessions(*), event:events(*, sessions:event_sessions(*))")
     .eq("qr_token", token)
     .maybeSingle();
   if (error) throw error;
@@ -84,7 +84,7 @@ export async function getRegistrationsForEvent(eventId: string): Promise<Registr
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("registrations")
-    .select("*")
+    .select("*, session:event_sessions(*)")
     .eq("event_id", eventId)
     .order("created_at", { ascending: true });
   if (error) throw error;

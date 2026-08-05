@@ -1,100 +1,26 @@
 "use client";
-
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowRight, Building2, Laptop, LoaderCircle, LockKeyhole } from "lucide-react";
+import { AlertCircle, ArrowRight, Building2, CalendarDays, Laptop, LoaderCircle, LockKeyhole } from "lucide-react";
 import type { EventRecord, RegistrationMethod } from "@/lib/types";
+import { formatDateTime } from "@/lib/format";
 
 export function RegistrationForm({ event, initialMethod }: { event: EventRecord; initialMethod: RegistrationMethod }) {
   const router = useRouter();
-  const [method, setMethod] = useState<RegistrationMethod>(
-    event.registration_methods.includes(initialMethod) ? initialMethod : event.registration_methods[0],
-  );
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
+  const activeSessions = useMemo(() => (event.sessions || []).filter((item) => item.is_active && new Date(item.start_at).getTime() > Date.now()).sort((a,b)=>a.start_at.localeCompare(b.start_at)), [event.sessions]);
+  const [sessionId, setSessionId] = useState(activeSessions.find((item)=>item.confirmed_count < item.capacity)?.id || "");
+  const [method, setMethod] = useState<RegistrationMethod>(event.registration_methods.includes(initialMethod) ? initialMethod : event.registration_methods[0]);
+  const [error, setError] = useState(""); const [submitting, setSubmitting] = useState(false);
   async function handleSubmit(formEvent: FormEvent<HTMLFormElement>) {
-    formEvent.preventDefault();
-    setError("");
-    setSubmitting(true);
-    const form = new FormData(formEvent.currentTarget);
-
-    const payload = {
-      eventId: event.id,
-      fullName: form.get("fullName"),
-      email: form.get("email"),
-      phone: form.get("phone"),
-      method,
-      notes: form.get("notes") || "",
-      consent: form.get("consent") === "on",
-      website: form.get("website") || "",
-    };
-
-    try {
-      const response = await fetch("/api/registrations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "未能完成報名，請稍後再試。");
-      router.push(`/registration/success?token=${encodeURIComponent(result.qr_token)}`);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "未能完成報名，請稍後再試。");
-      setSubmitting(false);
-    }
+    formEvent.preventDefault(); setError(""); setSubmitting(true); const form = new FormData(formEvent.currentTarget);
+    const payload = { eventId:event.id, sessionId:event.is_multi_session ? sessionId : null, fullName:form.get("fullName"), email:form.get("email"), phone:form.get("phone"), method, notes:form.get("notes")||"", consent:form.get("consent")==="on", website:form.get("website")||"" };
+    try { const response=await fetch("/api/registrations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}); const result=await response.json(); if(!response.ok) throw new Error(result.error||"未能完成報名"); router.push(`/registration/success?token=${encodeURIComponent(result.qr_token)}`); }
+    catch(caught){setError(caught instanceof Error?caught.message:"未能完成報名");setSubmitting(false);}
   }
-
-  return (
-    <form className="registration-form" onSubmit={handleSubmit}>
-      <fieldset className="form-section">
-        <legend>選擇報名方法</legend>
-        <div className="method-choice-grid">
-          {event.registration_methods.includes("online") && (
-            <label className={method === "online" ? "method-choice selected" : "method-choice"}>
-              <input type="radio" name="method" checked={method === "online"} onChange={() => setMethod("online")} />
-              <Laptop /><span><strong>網上報名</strong><small>即時完成申請並收取電子入場證</small></span>
-            </label>
-          )}
-          {event.registration_methods.includes("in_person") && (
-            <label className={method === "in_person" ? "method-choice selected" : "method-choice"}>
-              <input type="radio" name="method" checked={method === "in_person"} onChange={() => setMethod("in_person")} />
-              <Building2 /><span><strong>親身報名</strong><small>先預留名額，再到服務櫃台核實</small></span>
-            </label>
-          )}
-        </div>
-      </fieldset>
-
-      <fieldset className="form-section">
-        <legend>參加者資料</legend>
-        <div className="form-grid">
-          <label className="field field-full"><span>姓名 *</span><input name="fullName" autoComplete="name" required maxLength={80} placeholder="請輸入參加者姓名" /></label>
-          <label className="field"><span>電郵地址（選填）</span><input name="email" type="email" autoComplete="email" maxLength={160} placeholder="填寫後會收到確認電郵及 QR Code" /></label>
-          <label className="field"><span>聯絡電話 *</span><input name="phone" type="tel" autoComplete="tel" required maxLength={30} placeholder="9123 4567" /></label>
-          <label className="field field-full"><span>備註</span><textarea name="notes" rows={4} maxLength={500} placeholder="例如無障礙安排、飲食需要或其他查詢（選填）" /></label>
-          <label className="honeypot" aria-hidden="true"><span>Website</span><input name="website" tabIndex={-1} autoComplete="off" /></label>
-        </div>
-      </fieldset>
-
-      <label className="consent-row">
-        <input type="checkbox" name="consent" required />
-        <span>我同意系統收集以上資料作處理活動報名、聯絡及出席登記之用。</span>
-      </label>
-
-      {method === "in_person" && (
-        <div className="notice notice-info">
-          <Building2 />
-          <span>提交後會先保留名額。請於指定時間到「{event.contact_address || event.location}」完成核實；如有填寫電郵，系統亦會寄送確認資料。</span>
-        </div>
-      )}
-      {error && <div className="notice notice-error" role="alert"><AlertCircle />{error}</div>}
-
-      <div className="form-submit-row">
-        <span className="privacy-note"><LockKeyhole />資料會經加密連線傳送</span>
-        <button className="button button-primary button-large" type="submit" disabled={submitting}>
-          {submitting ? <><LoaderCircle className="spin" />處理中…</> : <>提交報名<ArrowRight /></>}
-        </button>
-      </div>
-    </form>
-  );
+  return <form className="registration-form" onSubmit={handleSubmit}>
+    {event.is_multi_session && <fieldset className="form-section"><legend>選擇活動日期及時段</legend><div className="session-choice-grid">{activeSessions.map((session)=>{const remaining=Math.max(0,session.capacity-session.confirmed_count);return <label key={session.id} className={sessionId===session.id?"session-choice selected":"session-choice"}><input type="radio" name="sessionId" checked={sessionId===session.id} disabled={remaining===0} onChange={()=>setSessionId(session.id)} /><CalendarDays/><span><strong>{formatDateTime(session.start_at)}–{new Intl.DateTimeFormat("zh-HK",{timeZone:"Asia/Hong_Kong",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(session.end_at))}</strong><small>{remaining===0?"名額已滿":`尚餘 ${remaining} 位`}</small></span></label>})}</div>{activeSessions.length===0&&<div className="notice notice-error">暫時沒有可報名時段</div>}</fieldset>}
+    <fieldset className="form-section"><legend>選擇報名方法</legend><div className="method-choice-grid">{event.registration_methods.includes("online")&&<label className={method==="online"?"method-choice selected":"method-choice"}><input type="radio" checked={method==="online"} onChange={()=>setMethod("online")}/><Laptop/><span><strong>網上報名</strong><small>即時完成申請</small></span></label>}{event.registration_methods.includes("in_person")&&<label className={method==="in_person"?"method-choice selected":"method-choice"}><input type="radio" checked={method==="in_person"} onChange={()=>setMethod("in_person")}/><Building2/><span><strong>親身報名</strong><small>先預留名額</small></span></label>}</div></fieldset>
+    <fieldset className="form-section"><legend>參加者資料</legend><div className="form-grid"><label className="field field-full"><span>姓名 *</span><input name="fullName" required maxLength={80}/></label><label className="field"><span>聯絡電話 *</span><input name="phone" type="tel" required maxLength={30}/></label><label className="field"><span>電郵地址（選填）</span><input name="email" type="email" maxLength={160}/></label><label className="field field-full"><span>備註</span><textarea name="notes" rows={4} maxLength={500}/></label><label className="honeypot"><input name="website" tabIndex={-1}/></label></div></fieldset>
+    <label className="consent-row"><input type="checkbox" name="consent" required/><span>我同意系統收集以上資料作活動報名及聯絡用途。</span></label>{error&&<div className="notice notice-error"><AlertCircle/>{error}</div>}<div className="form-submit-row"><span className="privacy-note"><LockKeyhole/>資料會經加密連線傳送</span><button className="button button-primary button-large" disabled={submitting||(event.is_multi_session&&!sessionId)}>{submitting?<><LoaderCircle className="spin"/>處理中…</>:<>提交報名<ArrowRight/></>}</button></div>
+  </form>;
 }
