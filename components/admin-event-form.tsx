@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CalendarPlus, Clock3, ImageUp, LoaderCircle, Plus, Save, Trash2, Zap } from "lucide-react";
+import { AlertCircle, CalendarDays, CalendarPlus, Clock3, ImageUp, LoaderCircle, Plus, Save, Trash2, Zap } from "lucide-react";
 import type { EventRecord, EventSessionRecord, RegistrationMethod } from "@/lib/types";
 
 function localInput(value?: string | null) {
@@ -36,16 +36,51 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   );
 
 
-  function addSession() {
+  const sessionDates = useMemo(() => [...new Set(sessions.map((item) => item.session_date))].sort(), [sessions]);
+
+  function addDate() {
     const next = defaultSession();
-    const previous = sessions.at(-1);
-    if (previous) {
-      const start = new Date(previous.start_at); start.setHours(start.getHours() + 3);
-      const end = new Date(start); end.setHours(end.getHours() + 2);
-      next.session_date = start.toISOString().slice(0, 10);
-      next.start_at = start.toISOString(); next.end_at = end.toISOString();
+    const lastDate = sessionDates.at(-1);
+    if (lastDate) {
+      const date = new Date(`${lastDate}T12:00:00`);
+      date.setDate(date.getDate() + 1);
+      const nextDate = date.toISOString().slice(0, 10);
+      const start = new Date(`${nextDate}T10:00:00`);
+      const end = new Date(`${nextDate}T12:00:00`);
+      next.session_date = nextDate;
+      next.start_at = start.toISOString();
+      next.end_at = end.toISOString();
     }
     setSessions((current) => [...current, { ...next, sort_order: current.length }]);
+  }
+
+  function addSessionForDate(sessionDate: string) {
+    const sameDate = sessions.filter((item) => item.session_date === sessionDate).sort((a,b)=>a.start_at.localeCompare(b.start_at));
+    const previous = sameDate.at(-1);
+    const start = previous ? new Date(previous.end_at) : new Date(`${sessionDate}T10:00:00`);
+    const end = new Date(start); end.setHours(end.getHours() + 2);
+    const next = defaultSession();
+    next.session_date = sessionDate;
+    next.start_at = start.toISOString();
+    next.end_at = end.toISOString();
+    setSessions((current) => [...current, { ...next, sort_order: current.length }]);
+  }
+
+  function updateDate(oldDate: string, newDate: string) {
+    setSessions((current) => current.map((item) => {
+      if (item.session_date !== oldDate) return item;
+      const start = new Date(item.start_at);
+      const end = new Date(item.end_at);
+      const [year, month, day] = newDate.split("-").map(Number);
+      start.setFullYear(year, month - 1, day);
+      end.setFullYear(year, month - 1, day);
+      return { ...item, session_date: newDate, start_at: start.toISOString(), end_at: end.toISOString() };
+    }));
+  }
+
+  function removeDate(sessionDate: string) {
+    if (sessionDates.length === 1) return;
+    setSessions((current) => current.filter((item) => item.session_date !== sessionDate));
   }
 
   function updateSession(index: number, patch: Partial<SessionDraft>) {
@@ -202,18 +237,31 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       </section>
 
       {isMulti && <section className="admin-form-section multi-session-builder">
-        <div className="section-heading"><div><h2>活動日期及時段</h2><span>每個日期可建立多個時段，各自設定名額上限</span></div><button type="button" className="button button-secondary button-small" onClick={addSession}><Plus />新增時段</button></div>
-        <div className="session-editor-list">
-          {sessions.map((session, index) => <article className="session-editor-card" key={session.id || index}>
-            <header><span><CalendarPlus />時段 {index + 1}</span><button type="button" className="icon-button danger" onClick={() => removeSession(index)} disabled={sessions.length === 1}><Trash2 /></button></header>
-            <div className="form-grid">
-              <label className="field"><span>日期 *</span><input type="date" value={session.session_date} onChange={(e) => { const date=e.target.value; const start=new Date(session.start_at); const end=new Date(session.end_at); const [y,m,d]=date.split('-').map(Number); start.setFullYear(y,m-1,d); end.setFullYear(y,m-1,d); updateSession(index,{session_date:date,start_at:start.toISOString(),end_at:end.toISOString()}); }} required /></label>
-              <label className="field"><span>開始時間 *</span><input type="time" value={localInput(session.start_at).slice(11,16)} onChange={(e) => { const date=new Date(session.start_at); const [h,m]=e.target.value.split(':').map(Number); date.setHours(h,m,0,0); updateSession(index,{start_at:date.toISOString()}); }} required /></label>
-              <label className="field"><span>結束時間 *</span><input type="time" value={localInput(session.end_at).slice(11,16)} onChange={(e) => { const date=new Date(session.end_at); const [h,m]=e.target.value.split(':').map(Number); date.setHours(h,m,0,0); updateSession(index,{end_at:date.toISOString()}); }} required /></label>
-              <label className="field"><span>人數上限 *</span><input type="number" min={1} value={session.capacity} onChange={(e) => updateSession(index,{capacity:Number(e.target.value)})} required /></label>
-              <label className="field checkbox-field"><input type="checkbox" checked={session.is_active} onChange={(e) => updateSession(index,{is_active:e.target.checked})} /><span>開放此時段</span></label>
-            </div>
-          </article>)}
+        <div className="section-heading"><div><h2>活動日期及時段</h2><span>先建立活動日期，再於每個日期下新增不同時段及獨立名額</span></div><button type="button" className="button button-secondary button-small" onClick={addDate}><CalendarPlus />新增日期</button></div>
+        <div className="multi-date-editor-list">
+          {sessionDates.map((sessionDate, dateIndex) => {
+            const dateSessions = sessions.filter((item) => item.session_date === sessionDate).sort((a,b)=>a.start_at.localeCompare(b.start_at));
+            const dateCapacity = dateSessions.reduce((sum,item)=>sum+Number(item.capacity||0),0);
+            return <article className="multi-date-editor-card" key={sessionDate}>
+              <header className="multi-date-editor-header">
+                <div><CalendarDays /><label><span>活動日期 {dateIndex + 1}</span><input type="date" value={sessionDate} onChange={(e)=>updateDate(sessionDate,e.target.value)} required /></label><strong>當日總名額 {dateCapacity} 人</strong></div>
+                <div><button type="button" className="button button-secondary button-small" onClick={()=>addSessionForDate(sessionDate)}><Plus />新增時段</button><button type="button" className="icon-button danger" onClick={()=>removeDate(sessionDate)} disabled={sessionDates.length===1}><Trash2 /></button></div>
+              </header>
+              <div className="date-session-editor-list">
+                {dateSessions.map((session, sessionIndex) => {
+                  const index = sessions.findIndex((item)=>item.id===session.id);
+                  return <section className="date-session-editor-row" key={session.id}>
+                    <strong>時段 {sessionIndex + 1}</strong>
+                    <label className="field"><span>開始時間 *</span><input type="time" value={localInput(session.start_at).slice(11,16)} onChange={(e) => { const date=new Date(session.start_at); const [h,m]=e.target.value.split(':').map(Number); date.setHours(h,m,0,0); updateSession(index,{start_at:date.toISOString()}); }} required /></label>
+                    <label className="field"><span>結束時間 *</span><input type="time" value={localInput(session.end_at).slice(11,16)} onChange={(e) => { const date=new Date(session.end_at); const [h,m]=e.target.value.split(':').map(Number); date.setHours(h,m,0,0); updateSession(index,{end_at:date.toISOString()}); }} required /></label>
+                    <label className="field"><span>人數上限 *</span><input type="number" min={1} value={session.capacity} onChange={(e) => updateSession(index,{capacity:Number(e.target.value)})} required /></label>
+                    <label className="field checkbox-field"><input type="checkbox" checked={session.is_active} onChange={(e) => updateSession(index,{is_active:e.target.checked})} /><span>開放</span></label>
+                    <button type="button" className="icon-button danger" onClick={() => removeSession(index)} disabled={sessions.length === 1 || dateSessions.length === 1}><Trash2 /></button>
+                  </section>;
+                })}
+              </div>
+            </article>;
+          })}
         </div>
       </section>}
 
