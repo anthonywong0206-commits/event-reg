@@ -253,6 +253,8 @@ function buildInstantMessage(registration: RegistrationRecord, event: EventRecor
     "",
     `活動：<b>${escapeHtml(event.title)}</b>`,
     `參加者：<b>${escapeHtml(registration.full_name)}</b>`,
+    `電話：${escapeHtml(registration.phone)}`,
+    ...(registration.email ? [`電郵：${escapeHtml(registration.email)}`] : []),
     `報名狀態：${statusLabel(registration)}`,
     `活動總報名人數：<b>${eventTotal} / ${event.capacity}</b>`,
     `尚餘名額：${remaining}`,
@@ -303,6 +305,8 @@ function buildDigestMessage(
     for (const registration of eventRegistrations) {
       if (visibleNames >= MAX_VISIBLE_NAMES) break;
       lines.push(`• ${escapeHtml(registration.full_name)}（${statusLabel(registration)}）`);
+      lines.push(`  電話：${escapeHtml(registration.phone)}`);
+      if (registration.email) lines.push(`  電郵：${escapeHtml(registration.email)}`);
       visibleNames += 1;
     }
     lines.push("");
