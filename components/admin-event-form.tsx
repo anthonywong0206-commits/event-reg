@@ -144,7 +144,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       end_at: isMulti ? sortedEnds.at(-1)! : new Date(value("end_at")).toISOString(),
       registration_start_at: registrationStartMode === "immediate"
         ? event?.registration_start_at && new Date(event.registration_start_at).getTime() <= Date.now()
-          ? event.registration_start_at
+          ? new Date(event.registration_start_at).toISOString()
           : new Date().toISOString()
         : new Date(value("registration_start_at")).toISOString(),
       registration_deadline: new Date(value("registration_deadline")).toISOString(),
