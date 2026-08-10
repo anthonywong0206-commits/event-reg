@@ -12,12 +12,12 @@ function localInput(value?: string | null) {
   return date.toISOString().slice(0, 16);
 }
 
-type SessionDraft = Pick<EventSessionRecord, "id" | "session_date" | "start_at" | "end_at" | "capacity" | "sort_order" | "is_active">;
+type SessionDraft = Pick<EventSessionRecord, "id" | "session_date" | "start_at" | "end_at" | "capacity" | "confirmed_count" | "sort_order" | "is_active">;
 
 function defaultSession(): SessionDraft {
   const start = new Date(); start.setDate(start.getDate() + 14); start.setHours(10, 0, 0, 0);
   const end = new Date(start); end.setHours(12, 0, 0, 0);
-  return { id: crypto.randomUUID(), session_date: start.toISOString().slice(0,10), start_at: start.toISOString(), end_at: end.toISOString(), capacity: 20, sort_order: 0, is_active: true };
+  return { id: crypto.randomUUID(), session_date: start.toISOString().slice(0,10), start_at: start.toISOString(), end_at: end.toISOString(), capacity: 20, confirmed_count: 0, sort_order: 0, is_active: true };
 }
 
 export function AdminEventForm({ event, forceMulti = false }: { event?: EventRecord | null; forceMulti?: boolean }) {
@@ -196,6 +196,8 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
 
   return (
     <form className="admin-event-form" onSubmit={submit}>
+      {event && <div className="notice notice-info event-edit-notice"><AlertCircle /><div><strong>現正編輯已建立活動</strong><span>你可以修改以下所有活動資料，包括活動內容、日期時間、名額及候補設定。名額只不可低於目前已確認人數。</span></div></div>}
+
       <section className="admin-form-section">
         <div className="section-heading"><h2>基本資料</h2><span>活動名稱、分類及公開狀態</span></div>
         <div className="form-grid">
@@ -230,9 +232,9 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
           </div>
           <label className="field"><span>指定開始報名時間</span><input name="registration_start_at" type="datetime-local" required={registrationStartMode === "scheduled"} disabled={registrationStartMode === "immediate"} defaultValue={localInput(event?.registration_start_at)} /></label>
           <label className="field"><span>截止報名時間 *</span><input name="registration_deadline" type="datetime-local" required defaultValue={localInput(event?.registration_deadline)} /></label>
-          {!isMulti && <label className="field"><span>人數上限 *</span><input name="capacity" type="number" min={1} required defaultValue={event?.capacity || 50} /></label>}
+          {!isMulti && <label className="field"><span>人數上限 *</span><input name="capacity" type="number" min={Math.max(1, event?.confirmed_count || 0)} required defaultValue={event?.capacity || 50} /><small>{event ? `目前已確認 ${event.confirmed_count} 人；可增加名額，最低不可少於 ${event.confirmed_count} 人。` : "設定活動可接受的正選人數。"}</small></label>}
           {isMulti && <div className="field"><span>全部時段總名額</span><strong className="session-capacity-total">{totalSessionCapacity} 人</strong></div>}
-          <label className="field checkbox-field field-full"><input type="checkbox" name="accepts_waitlist" defaultChecked={Boolean(event?.accepts_waitlist)} /><span><strong>正選滿額後接受候補登記</strong><small>開啟後，正選名額滿額時前台仍可提交候補；候補人數不會在前台顯示。</small></span></label>
+          <label className="field checkbox-field field-full waitlist-setting-field"><input type="checkbox" name="accepts_waitlist" defaultChecked={Boolean(event?.accepts_waitlist)} /><span><strong>正選滿額後接受候補登記</strong><small>可隨時開啟或關閉。開啟後，正選滿額時前台只顯示「現只接受候補」，不會顯示候補人數；關閉後滿額即停止報名。</small></span></label>
           <label className="field"><span>活動地點 *</span><input name="location" required defaultValue={event?.location} /></label>
           <label className="field"><span>完整地址</span><input name="address" defaultValue={event?.address || ""} /></label>
         </div>
@@ -256,7 +258,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
                     <strong>時段 {sessionIndex + 1}</strong>
                     <label className="field"><span>開始時間 *</span><input type="time" value={localInput(session.start_at).slice(11,16)} onChange={(e) => { const date=new Date(session.start_at); const [h,m]=e.target.value.split(':').map(Number); date.setHours(h,m,0,0); updateSession(index,{start_at:date.toISOString()}); }} required /></label>
                     <label className="field"><span>結束時間 *</span><input type="time" value={localInput(session.end_at).slice(11,16)} onChange={(e) => { const date=new Date(session.end_at); const [h,m]=e.target.value.split(':').map(Number); date.setHours(h,m,0,0); updateSession(index,{end_at:date.toISOString()}); }} required /></label>
-                    <label className="field"><span>人數上限 *</span><input type="number" min={1} value={session.capacity} onChange={(e) => updateSession(index,{capacity:Number(e.target.value)})} required /></label>
+                    <label className="field"><span>人數上限 *</span><input type="number" min={Math.max(1, session.confirmed_count || 0)} value={session.capacity} onChange={(e) => updateSession(index,{capacity:Number(e.target.value)})} required /><small>{event ? `已確認 ${session.confirmed_count || 0} 人；可增加名額。` : "此時段正選名額"}</small></label>
                     <label className="field checkbox-field"><input type="checkbox" checked={session.is_active} onChange={(e) => updateSession(index,{is_active:e.target.checked})} /><span>開放</span></label>
                     <button type="button" className="icon-button danger" onClick={() => removeSession(index)} disabled={sessions.length === 1 || dateSessions.length === 1}><Trash2 /></button>
                   </section>;

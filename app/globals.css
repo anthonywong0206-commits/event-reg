@@ -698,3 +698,6 @@ svg { width: 1.05em; height: 1.05em; flex: 0 0 auto; }
 
 /* Waitlist feature */
 .capacity-signal.waitlist{background:#e8eef8;color:#315c8d}.status-waitlist{background:#e8eef8;color:#315c8d}.notice-waitlist{border-color:#c7d7ee;background:#f4f8fd;color:#274b75}.notice-waitlist span{display:grid;gap:.2rem}.waitlist-ticket{align-content:center;text-align:center;min-height:360px}.waitlist-ticket p{font-weight:800;color:#315c8d}.admin-waitlist-section{margin-top:2rem;padding-top:1.5rem;border-top:2px solid #e6ebf2}.waitlist-column{border-color:#cdd9e8;background:#f8fbff}.participant-card.waitlist{border-color:#c8d7e8;background:#f5f9fe}
+
+/* Existing event edit clarity */
+.event-edit-notice{align-items:flex-start;margin-bottom:1rem}.event-edit-notice>div{display:grid;gap:.25rem}.event-edit-notice strong{font-size:.92rem}.event-edit-notice span{font-size:.8rem;line-height:1.55}.field>small{display:block;margin-top:.35rem;color:var(--muted);font-size:.72rem;line-height:1.45}.waitlist-setting-field{border:1px solid #c8d9d1;border-radius:14px;padding:1rem;background:#f8fbf9}
