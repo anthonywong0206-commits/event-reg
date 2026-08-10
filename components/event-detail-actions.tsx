@@ -31,11 +31,11 @@ export function EventDetailActions({ event }: { event: EventRecord }) {
           <>
             <ul className="check-list">
               <li><CheckCircle2 />填寫網上表格，立即提交申請</li>
-              <li><CheckCircle2 />成功後系統發送確認電郵及 QR Code</li>
+              <li><CheckCircle2 />正選成功後系統發送確認電郵及 QR Code</li>
               <li><CheckCircle2 />活動當日展示 QR Code 完成入場登記</li>
             </ul>
-            {state === "open" ? (
-              <Link className="button button-primary button-large" href={`/events/${event.slug}/register?method=online`}>立即網上報名</Link>
+            {(state === "open" || state === "waitlist") ? (
+              <Link className="button button-primary button-large" href={`/events/${event.slug}/register?method=online`}>{state === "waitlist" ? "登記候補名單" : "立即網上報名"}</Link>
             ) : (
               <button className="button button-disabled button-large" disabled>{state === "upcoming" ? `將於 ${formatDateTime(event.registration_start_at)} 開始報名` : state === "full" ? "名額已滿" : "報名已截止"}</button>
             )}
@@ -51,8 +51,8 @@ export function EventDetailActions({ event }: { event: EventRecord }) {
               </div>
             </div>
             <p className="muted">你亦可先填寫簡短資料，系統會保留名額，然後按指示到服務櫃台核實。</p>
-            {state === "open" ? (
-              <Link className="button button-secondary button-large" href={`/events/${event.slug}/register?method=in_person`}>預留親身報名名額</Link>
+            {(state === "open" || state === "waitlist") ? (
+              <Link className="button button-secondary button-large" href={`/events/${event.slug}/register?method=in_person`}>{state === "waitlist" ? "登記候補名單" : "預留親身報名名額"}</Link>
             ) : (
               <button className="button button-disabled button-large" disabled>{state === "upcoming" ? `將於 ${formatDateTime(event.registration_start_at)} 開始報名` : state === "full" ? "名額已滿" : "報名已截止"}</button>
             )}

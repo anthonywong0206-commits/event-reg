@@ -6,19 +6,19 @@ import { capacitySignal, formatEventDate, remainingSeats } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
 
 const shortDate = new Intl.DateTimeFormat("zh-HK", { timeZone:"Asia/Hong_Kong", month:"numeric", day:"numeric", weekday:"short" });
-function dateSignals(sessions: EventSessionRecord[] = []) {
+function dateSignals(sessions: EventSessionRecord[] = [], acceptsWaitlist = false) {
   const groups = new Map<string, EventSessionRecord[]>();
   sessions.filter((item)=>item.is_active).forEach((item)=>groups.set(item.session_date,[...(groups.get(item.session_date)||[]),item]));
   return [...groups.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([date,items])=>{
     const capacity=items.reduce((sum,item)=>sum+item.capacity,0);
     const confirmed=items.reduce((sum,item)=>sum+item.confirmed_count,0);
-    const signal=capacitySignal({capacity,confirmed_count:confirmed} as EventRecord);
+    const signal=capacitySignal({capacity,confirmed_count:confirmed,accepts_waitlist:acceptsWaitlist} as EventRecord);
     return {date,signal};
   });
 }
 
 export function EventCard({ event, size = "regular" }: { event: EventRecord; size?: "large" | "regular" | "wide" }) {
-  const dailySignals=event.is_multi_session?dateSignals(event.sessions):[];
+  const dailySignals=event.is_multi_session?dateSignals(event.sessions,event.accepts_waitlist):[];
   return (
     <article className={`event-card event-card-${size}`}>
       <Link href={`/events/${event.slug}`} className="event-card-image" aria-label={`查看 ${event.title}`}>
@@ -31,7 +31,7 @@ export function EventCard({ event, size = "regular" }: { event: EventRecord; siz
         <div className="event-meta">
           <span><CalendarDays />{event.is_multi_session?`${dailySignals.length} 個活動日期`:formatEventDate(event)}</span>
           <span><MapPin />{event.location}</span>
-          {event.is_multi_session?<div className="daily-capacity-signals" aria-label="各日期名額狀況">{dailySignals.map(({date,signal})=><span key={date}><b>{shortDate.format(new Date(`${date}T12:00:00`))}</b><em className={`capacity-signal ${signal.key}`}>{signal.label}</em></span>)}</div>:<span><UsersRound />{event.confirmed_count} / {event.capacity} 人已報名，尚餘 {remainingSeats(event)} 位</span>}
+          {event.is_multi_session?<div className="daily-capacity-signals" aria-label="各日期名額狀況">{dailySignals.map(({date,signal})=><span key={date}><b>{shortDate.format(new Date(`${date}T12:00:00`))}</b><em className={`capacity-signal ${signal.key}`}>{signal.label}</em></span>)}</div>:<span><UsersRound />{event.confirmed_count>=event.capacity&&event.accepts_waitlist?"正選已滿，現只接受候補":`${event.confirmed_count} / ${event.capacity} 人已報名，尚餘 ${remainingSeats(event)} 位`}</span>}
         </div>
       </div>
     </article>

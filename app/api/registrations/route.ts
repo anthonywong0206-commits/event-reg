@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (fullRegistration) registration = fullRegistration as RegistrationRecord;
     registration.event = event;
-    const emailResult = registration.email
+    const emailResult = registration.email && registration.status === "confirmed"
       ? await sendRegistrationEmail(registration, event)
       : { sent: false, skipped: true };
 
@@ -92,6 +92,7 @@ export async function POST(request: Request) {
       registration_no: registration.registration_no,
       qr_token: registration.qr_token,
       email_sent: emailResult.sent,
+      status: registration.status,
     }, { status: 201 });
   } catch (error) {
     console.error(error);

@@ -40,6 +40,7 @@ export interface EventRecord {
   contact_phone: string | null;
   contact_address: string | null;
   is_featured: boolean;
+  accepts_waitlist?: boolean;
   is_multi_session: boolean;
   sessions?: EventSessionRecord[];
   created_at?: string;
@@ -72,6 +73,7 @@ export interface RegistrationResult {
   registration_no: string;
   qr_token: string;
   email_sent: boolean;
+  status?: RegistrationStatus;
 }
 
 export interface SiteSettingsRecord {

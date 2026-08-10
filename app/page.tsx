@@ -42,7 +42,7 @@ export default async function HomePage() {
               <div className="floating-event-card">
                 <span>本月精選</span>
                 <strong>{featured[0]?.title || upcoming[0]?.title || "海洋永續週"}</strong>
-                <small>{featured[0] ? `尚餘 ${remainingSeats(featured[0])} 位` : upcoming[0] ? "即將開始報名" : "立即瀏覽活動"}</small>
+                <small>{featured[0] ? (featured[0].confirmed_count>=featured[0].capacity&&featured[0].accepts_waitlist?"現只接受候補":`尚餘 ${remainingSeats(featured[0])} 位`) : upcoming[0] ? "即將開始報名" : "立即瀏覽活動"}</small>
               </div>
             </div>
           </div>

@@ -60,6 +60,7 @@ export const eventSchema = z
     contact_phone: z.string().trim().max(50).nullable().optional(),
     contact_address: z.string().trim().max(300).nullable().optional(),
     is_featured: z.boolean().default(false),
+    accepts_waitlist: z.boolean().default(false),
     is_multi_session: z.boolean().default(false),
     sessions: z.array(eventSessionSchema).optional().default([]),
   })

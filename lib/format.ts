@@ -26,7 +26,7 @@ const timeFormatter = new Intl.DateTimeFormat("zh-HK", {
   hour12: false,
 });
 
-export type EventRegistrationState = "upcoming" | "open" | "full" | "closed";
+export type EventRegistrationState = "upcoming" | "open" | "waitlist" | "full" | "closed";
 
 export function formatDateTime(value: string): string {
   return dateTimeFormatter.format(new Date(value));
@@ -57,16 +57,16 @@ export function isRegistrationClosed(event: Pick<EventRecord, "registration_dead
 export function eventRegistrationState(event: EventRecord): EventRegistrationState {
   if (event.status !== "published") return "closed";
   if (isRegistrationNotStarted(event)) return "upcoming";
-  if (event.confirmed_count >= event.capacity) return "full";
   if (isRegistrationClosed(event)) return "closed";
+  if (event.confirmed_count >= event.capacity) return event.accepts_waitlist ? "waitlist" : "full";
   return "open";
 }
 
-export type CapacitySignal = "open" | "popular" | "limited" | "full";
+export type CapacitySignal = "open" | "popular" | "limited" | "waitlist" | "full";
 export function capacitySignal(event: EventRecord): { key: CapacitySignal; label: string } {
   const capacity = Math.max(1, event.capacity);
   const ratio = remainingSeats(event) / capacity;
-  if (ratio <= 0) return { key: "full", label: "名額已滿" };
+  if (ratio <= 0) return event.accepts_waitlist ? { key: "waitlist", label: "只接受候補" } : { key: "full", label: "名額已滿" };
   if (ratio <= 0.19) return { key: "limited", label: "尚餘少量" };
   if (ratio <= 0.49) return { key: "popular", label: "反應熱烈" };
   return { key: "open", label: "開放報名" };

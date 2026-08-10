@@ -27,8 +27,8 @@ export default async function RegisterPage({ params, searchParams }: { params: P
         <div className="breadcrumb"><Link href={`/events/${event.slug}`}><ArrowLeft />返回活動詳情</Link></div>
         <div className="register-layout">
           <section className="register-main">
-            <div className="page-title"><span>活動報名表</span><h1>完成你的活動申請</h1><p>填寫以下資料後，系統會即時核對名額並發送電子入場證。</p></div>
-            {state === "open" ? <RegistrationForm event={event} initialMethod={method} /> : (
+            <div className="page-title"><span>{state === "waitlist" ? "候補登記表" : "活動報名表"}</span><h1>{state === "waitlist" ? "正選已滿，現只接受候補" : "完成你的活動申請"}</h1><p>{state === "waitlist" ? "候補登記並不代表成功參加；如沒有收到主辦單位進一步通知，則視作未能申請。" : "填寫以下資料後，系統會即時核對名額並發送電子入場證。"}</p></div>
+            {(state === "open" || state === "waitlist") ? <RegistrationForm event={event} initialMethod={method} /> : (
               <div className="closed-message"><h2>{state === "upcoming" ? "活動尚未開始報名" : state === "full" ? "活動名額已滿" : "報名已截止"}</h2><p>{state === "upcoming" ? `報名將於 ${formatDateTime(event.registration_start_at)} 開放。` : "此活動暫時未能接受新申請。"}</p><Link className="button button-primary" href="/">瀏覽其他活動</Link></div>
             )}
           </section>
@@ -36,7 +36,7 @@ export default async function RegisterPage({ params, searchParams }: { params: P
             <div className="summary-poster"><EventImage src={event.poster_image_url} alt="" fill sizes="320px" objectFit="contain" objectPosition="center" /></div>
             <span className="category-tag static">{event.category}</span>
             <h2>{event.title}</h2>
-            <ul><li><CalendarDays />{event.is_multi_session ? `${event.sessions?.length || 0} 個日期／時段可選` : formatEventDate(event)}</li><li><MapPin />{event.location}</li><li><UsersRound />{event.is_multi_session ? "請於表格選擇時段" : `尚餘 ${remainingSeats(event)} 位`}</li></ul>
+            <ul><li><CalendarDays />{event.is_multi_session ? `${event.sessions?.length || 0} 個日期／時段可選` : formatEventDate(event)}</li><li><MapPin />{event.location}</li><li><UsersRound />{event.is_multi_session ? "請於表格選擇時段" : state === "waitlist" ? "現只接受候補" : `尚餘 ${remainingSeats(event)} 位`}</li></ul>
             <div className="summary-security"><strong>安全報名流程</strong><span>提交資料後才會正式扣減名額；重複或逾時申請不會造成超額報名。</span></div>
           </aside>
         </div>

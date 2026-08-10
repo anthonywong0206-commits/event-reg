@@ -13,7 +13,7 @@ export default async function AdminDashboardPage() {
   const { profile } = await requireAdmin();
   const events = await getAllEventsForAdmin();
   const totalRegistrations = events.reduce((total, event) => total + event.confirmed_count, 0);
-  const openEvents = events.filter((event) => eventRegistrationState(event) === "open").length;
+  const openEvents = events.filter((event) => ["open", "waitlist"].includes(eventRegistrationState(event))).length;
   const upcomingEvents = events.filter((event) => eventRegistrationState(event) === "upcoming").length;
 
   return (

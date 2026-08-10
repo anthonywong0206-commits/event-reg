@@ -157,6 +157,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       contact_phone: value("contact_phone") || null,
       contact_address: value("contact_address") || null,
       is_featured: form.get("is_featured") === "on",
+      accepts_waitlist: form.get("accepts_waitlist") === "on",
       is_multi_session: isMulti,
       sessions: normalizedSessions,
     };
@@ -231,6 +232,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
           <label className="field"><span>截止報名時間 *</span><input name="registration_deadline" type="datetime-local" required defaultValue={localInput(event?.registration_deadline)} /></label>
           {!isMulti && <label className="field"><span>人數上限 *</span><input name="capacity" type="number" min={1} required defaultValue={event?.capacity || 50} /></label>}
           {isMulti && <div className="field"><span>全部時段總名額</span><strong className="session-capacity-total">{totalSessionCapacity} 人</strong></div>}
+          <label className="field checkbox-field field-full"><input type="checkbox" name="accepts_waitlist" defaultChecked={Boolean(event?.accepts_waitlist)} /><span><strong>正選滿額後接受候補登記</strong><small>開啟後，正選名額滿額時前台仍可提交候補；候補人數不會在前台顯示。</small></span></label>
           <label className="field"><span>活動地點 *</span><input name="location" required defaultValue={event?.location} /></label>
           <label className="field"><span>完整地址</span><input name="address" defaultValue={event?.address || ""} /></label>
         </div>
