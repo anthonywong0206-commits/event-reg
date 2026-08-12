@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarDays, ChevronUp, Clock3, FolderOpenDot, History, MapPin, Sparkles } from "lucide-react";
 import { EventImage } from "@/components/event-image";
@@ -167,8 +167,42 @@ export function HomepageEventGroups({ openEvents, upcomingEvents, reviewEvents }
   upcomingEvents: EventRecord[];
   reviewEvents: EventRecord[];
 }) {
+  const [activeGroup, setActiveGroup] = useState<GroupKind>("open");
+
+  useEffect(() => {
+    const sections = ["open", "upcoming", "review"].map((kind) => document.getElementById(`group-${kind}`)).filter(Boolean) as HTMLElement[];
+    if (!sections.length || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visible?.target?.id) {
+          const id = visible.target.id.replace("group-", "") as GroupKind;
+          setActiveGroup(id);
+        }
+      },
+      { rootMargin: "-25% 0px -55% 0px", threshold: [0.15, 0.35, 0.6] },
+    );
+
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
+  function jumpToGroup(kind: GroupKind) {
+    setActiveGroup(kind);
+    const target = document.getElementById(`group-${kind}`);
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
     <div className="shell homepage-event-groups" id="events">
+      <div className="mobile-home-top-tabs" aria-label="活動分類捷徑">
+        <button type="button" className={activeGroup === "open" ? "active" : ""} onClick={() => jumpToGroup("open")}>精選活動</button>
+        <button type="button" className={activeGroup === "upcoming" ? "active" : ""} onClick={() => jumpToGroup("upcoming")}>即將開始</button>
+        <button type="button" className={activeGroup === "review" ? "active" : ""} onClick={() => jumpToGroup("review")}>活動回顧</button>
+      </div>
       <HomepageEventGroup
         kind="open"
         title="精選活動"

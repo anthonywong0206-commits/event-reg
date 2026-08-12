@@ -823,6 +823,7 @@ svg { width: 1.05em; height: 1.05em; flex: 0 0 auto; }
   /* Mobile homepage deliberately starts with activities; desktop hero remains unchanged. */
   .home-hero { display: none; }
   .homepage-event-groups { padding-top: 16px; padding-bottom: 20px; gap: 16px; }
+  .homepage-event-group { scroll-margin-top: 142px; }
   .homepage-event-group { padding: 14px; border-radius: 18px; box-shadow: 0 5px 18px rgba(31,61,94,.045); }
   .homepage-event-group-header { margin-bottom: 14px; gap: 12px; }
   .homepage-event-group-title { gap: 10px; }
@@ -893,4 +894,49 @@ svg { width: 1.05em; height: 1.05em; flex: 0 0 auto; }
 @media (max-width: 860px) {
   .home-hero + .homepage-event-groups { padding-top: 16px; }
   .process-section { display: none; }
+}
+
+/* Mobile category shortcuts */
+.mobile-home-top-tabs { display: none; }
+
+@media (max-width: 860px) {
+  .mobile-home-top-tabs {
+    position: sticky;
+    top: 76px;
+    z-index: 35;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 8px;
+    border: 1px solid rgba(212, 222, 235, .96);
+    border-radius: 18px;
+    background: rgba(255,255,255,.96);
+    backdrop-filter: blur(18px);
+    box-shadow: 0 10px 24px rgba(23, 49, 84, .08);
+  }
+  .mobile-home-top-tabs button {
+    min-width: 0;
+    min-height: 42px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 13px;
+    background: transparent;
+    color: #5d6c80;
+    font-size: calc(12px * var(--mobile-font-scale));
+    font-weight: 800;
+    line-height: 1.2;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .mobile-home-top-tabs button.active {
+    background: linear-gradient(135deg, #1d63dc, #2f8cff);
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(29, 99, 220, .22);
+  }
+}
+
+@media (max-width: 390px) {
+  .mobile-home-top-tabs { gap: 6px; padding: 6px; }
+  .mobile-home-top-tabs button { min-height: 40px; padding-inline: 6px; font-size: calc(11px * var(--mobile-font-scale)); }
 }
