@@ -79,6 +79,12 @@ function getEventStatus(event: EventRecord, kind: GroupKind) {
   if (registrationState === "waitlist") {
     return { text: "現只接受候補", tone: "waitlist" };
   }
+  if (registrationState === "full") {
+    return { text: "名額已滿", tone: "full" };
+  }
+  if (registrationState === "closed") {
+    return { text: "已截止報名", tone: "closed" };
+  }
   return {
     text: `尚餘 ${Math.max(0, event.capacity - event.confirmed_count)} 位`,
     tone: "open",

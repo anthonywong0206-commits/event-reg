@@ -780,3 +780,6 @@ svg { width: 1.05em; height: 1.05em; flex: 0 0 auto; }
   .homepage-event-meta span, .homepage-event-content p { font-size: 12px; }
   .homepage-event-status { font-size: 14px; }
 }
+
+.homepage-event-status.tone-full { color: var(--red); }
+.homepage-event-status.tone-closed { color: #6d7785; }

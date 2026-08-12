@@ -27,8 +27,9 @@ export default async function HomePage() {
     .sort((a, b) => new Date(a.registration_start_at).getTime() - new Date(b.registration_start_at).getTime());
   const openEvents = events
     .filter((event) => {
-      const state = eventRegistrationState(event);
-      return state === "open" || state === "waitlist";
+      const registrationHasStarted = new Date(event.registration_start_at).getTime() <= now;
+      const eventHasNotEnded = new Date(event.end_at).getTime() >= now;
+      return registrationHasStarted && eventHasNotEnded;
     })
     .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime());
   const reviewEvents = events
