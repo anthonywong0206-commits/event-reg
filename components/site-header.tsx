@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CalendarDays, Search, ShieldCheck } from "lucide-react";
+import { MobileBottomNav, MobileFontSizeButton } from "@/components/mobile-site-controls";
 
 export function SiteHeader() {
   return (
@@ -14,6 +15,9 @@ export function SiteHeader() {
             <small>活動報名平台</small>
           </span>
         </Link>
+        <div className="mobile-header-actions">
+          <MobileFontSizeButton />
+        </div>
         <nav className="main-nav" aria-label="主要導覽">
           <Link href="/#events"><Search size={16} />探索活動</Link>
           <Link href="/#closing">即將截止</Link>
@@ -21,6 +25,7 @@ export function SiteHeader() {
           <Link href="/admin" className="admin-link"><ShieldCheck size={16} />管理後台</Link>
         </nav>
       </div>
+      <MobileBottomNav />
     </header>
   );
 }
