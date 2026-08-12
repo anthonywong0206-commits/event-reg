@@ -1,6 +1,8 @@
 export type RegistrationMethod = "online" | "in_person";
 export type EventStatus = "draft" | "published" | "cancelled";
 export type RegistrationStatus = "confirmed" | "cancelled" | "waitlist";
+export type HeroButtonPosition = "left" | "center" | "right";
+export type HeroButtonLinkType = "event" | "external";
 
 export interface EventSessionRecord {
   id: string;
@@ -82,6 +84,12 @@ export interface SiteSettingsRecord {
   hero_description: string;
   hero_image_url: string;
   hero_image_alt: string;
+  hero_button_enabled: boolean;
+  hero_button_label: string;
+  hero_button_position: HeroButtonPosition;
+  hero_button_link_type: HeroButtonLinkType;
+  hero_button_event_slug: string | null;
+  hero_button_external_url: string | null;
   updated_by?: string | null;
   created_at?: string;
   updated_at?: string;

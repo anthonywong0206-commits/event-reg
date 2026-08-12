@@ -9,6 +9,17 @@ import { Countdown } from "@/components/countdown";
 import { getPublishedEvents } from "@/lib/data";
 import { getPublicSiteSettings } from "@/lib/site-settings";
 import { eventRegistrationState, formatDeadline, remainingSeats } from "@/lib/format";
+import type { EventRecord } from "@/lib/types";
+
+function resolveHeroButtonHref(events: EventRecord[], siteSettings: Awaited<ReturnType<typeof getPublicSiteSettings>>) {
+  if (!siteSettings.hero_button_enabled) return null;
+  if (siteSettings.hero_button_link_type === "external") {
+    return siteSettings.hero_button_external_url || null;
+  }
+  if (!siteSettings.hero_button_event_slug) return null;
+  const matched = events.find((event) => event.slug === siteSettings.hero_button_event_slug);
+  return matched ? `/events/${matched.slug}` : null;
+}
 
 export default async function HomePage() {
   const [events, siteSettings] = await Promise.all([getPublishedEvents(), getPublicSiteSettings()]);
@@ -21,24 +32,46 @@ export default async function HomePage() {
     .filter((event) => eventRegistrationState(event) === "open")
     .sort((a, b) => new Date(a.registration_deadline).getTime() - new Date(b.registration_deadline).getTime())
     .slice(0, 3);
+  const heroButtonHref = resolveHeroButtonHref(events, siteSettings);
+  const heroButtonIsExternal = Boolean(heroButtonHref && /^https?:\/\//i.test(heroButtonHref));
 
   return (
     <>
       <SiteHeader />
       <main>
         <section className="home-hero">
-          <div className="shell hero-layout">
-            <div className="hero-copy">
-              <h1>{siteSettings.hero_title}</h1>
-              <p>{siteSettings.hero_description}</p>
-              <div className="hero-actions">
-                <Link className="button button-primary button-large" href="#events">探索活動<ArrowRight /></Link>
-                <Link className="button button-ghost button-large" href="#how-it-works">了解報名流程</Link>
+          <div className="shell hero-layout hero-layout-banner-only">
+            <div className="hero-visual hero-visual-banner">
+              <EventImage
+                src={siteSettings.hero_image_url}
+                alt={siteSettings.hero_image_alt}
+                fill
+                priority
+                sizes="(max-width: 860px) 100vw, 1240px"
+                objectFit="cover"
+                objectPosition="center"
+              />
+              <div className="hero-overlay">
+                <div className="hero-copy hero-copy-overlay">
+                  <h1>{siteSettings.hero_title}</h1>
+                  <p>{siteSettings.hero_description}</p>
+                  <div className={`hero-actions hero-actions-${siteSettings.hero_button_position}`}>
+                    <Link className="button button-secondary button-large hero-banner-secondary" href="#events">查看活動</Link>
+                    {heroButtonHref && (
+                      <Link
+                        className="button button-primary button-large hero-banner-primary"
+                        href={heroButtonHref}
+                        target={heroButtonIsExternal ? "_blank" : undefined}
+                        rel={heroButtonIsExternal ? "noreferrer noopener" : undefined}
+                      >
+                        {siteSettings.hero_button_label}
+                        {!heroButtonIsExternal && <ArrowRight />}
+                      </Link>
+                    )}
+                  </div>
+                  <div className="hero-proof hero-proof-overlay"><span><CheckCircle2 />即時名額顯示</span><span><MailCheck />自動確認電郵</span><span><QrCode />QR Code 入場</span></div>
+                </div>
               </div>
-              <div className="hero-proof"><span><CheckCircle2 />即時名額顯示</span><span><MailCheck />自動確認電郵</span><span><QrCode />QR Code 入場</span></div>
-            </div>
-            <div className="hero-visual">
-              <EventImage src={siteSettings.hero_image_url} alt={siteSettings.hero_image_alt} fill priority sizes="(max-width: 900px) 100vw, 50vw" />
               <div className="floating-event-card">
                 <span>本月精選</span>
                 <strong>{featured[0]?.title || upcoming[0]?.title || "海洋永續週"}</strong>

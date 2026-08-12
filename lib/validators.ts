@@ -10,6 +10,26 @@ const optionalEmailSchema = z.preprocess(
   z.email("請輸入有效電郵地址").max(160).nullable(),
 );
 
+const optionalTrimmedString = (max: number) => z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  },
+  z.string().max(max).nullable(),
+);
+
+const optionalUrlSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  },
+  z.url("請輸入有效的外部連結網址（需以 http:// 或 https:// 開始）").max(1000).nullable(),
+);
+
 export const registrationSchema = z.object({
   eventId: z.uuid("活動資料無效"),
   sessionId: z.uuid("請選擇有效活動時段").nullable().optional(),
@@ -95,6 +115,26 @@ export const siteSettingsSchema = z.object({
   hero_description: z.string().trim().min(2, "請輸入首頁說明文字").max(800, "首頁說明文字不可超過 800 字"),
   hero_image_url: z.string().trim().min(1, "請上載或輸入橫額圖片").max(1000),
   hero_image_alt: z.string().trim().min(1, "請輸入圖片替代文字").max(240),
+  hero_button_enabled: z.boolean().default(false),
+  hero_button_label: z.string().trim().max(80, "快捷按鈕文字不可超過 80 字").default("立即報名"),
+  hero_button_position: z.enum(["left", "center", "right"]).default("center"),
+  hero_button_link_type: z.enum(["event", "external"]).default("event"),
+  hero_button_event_slug: optionalTrimmedString(120),
+  hero_button_external_url: optionalUrlSchema,
+}).superRefine((data, context) => {
+  if (!data.hero_button_enabled) return;
+
+  if (data.hero_button_label.trim().length < 1) {
+    context.addIssue({ code: "custom", path: ["hero_button_label"], message: "請輸入快捷按鈕文字" });
+  }
+
+  if (data.hero_button_link_type === "event" && !data.hero_button_event_slug) {
+    context.addIssue({ code: "custom", path: ["hero_button_event_slug"], message: "請選擇要連結的活動" });
+  }
+
+  if (data.hero_button_link_type === "external" && !data.hero_button_external_url) {
+    context.addIssue({ code: "custom", path: ["hero_button_external_url"], message: "請輸入外部連結網址" });
+  }
 });
 
 const adminRegistrationFields = {

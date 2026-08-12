@@ -37,7 +37,7 @@ export async function PUT(request: Request) {
     if (error) {
       if (error.code === "PGRST205" || error.code === "PGRST204") {
         return NextResponse.json(
-          { error: "資料庫尚未完成『首頁橫額設定』更新，請先套用 Migration：202608040002_add_homepage_hero_settings.sql" },
+          { error: "資料庫尚未完成『首頁橫額快捷按鈕設定』更新，請先套用 Migration：202608120001_update_homepage_hero_quick_button.sql" },
           { status: 503 },
         );
       }
