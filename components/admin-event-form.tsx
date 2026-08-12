@@ -131,6 +131,21 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
     }));
     const sortedStarts = normalizedSessions.map((item) => item.start_at).sort();
     const sortedEnds = normalizedSessions.map((item) => item.end_at).sort();
+    const startAtIso = isMulti ? sortedStarts[0] : new Date(value("start_at")).toISOString();
+    const endAtIso = isMulti ? sortedEnds.at(-1)! : new Date(value("end_at")).toISOString();
+    const registrationDeadlineIso = new Date(value("registration_deadline")).toISOString();
+    let registrationStartAtIso: string;
+    if (registrationStartMode === "immediate") {
+      if (new Date(registrationDeadlineIso).getTime() <= Date.now()) {
+        registrationStartAtIso = registrationDeadlineIso;
+      } else if (event?.registration_start_at && new Date(event.registration_start_at).getTime() <= Date.now()) {
+        registrationStartAtIso = new Date(event.registration_start_at).toISOString();
+      } else {
+        registrationStartAtIso = new Date().toISOString();
+      }
+    } else {
+      registrationStartAtIso = new Date(value("registration_start_at")).toISOString();
+    }
     const payload = {
       title: value("title"),
       slug: value("slug"),
@@ -140,14 +155,10 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       category: value("category"),
       location: value("location"),
       address: value("address") || null,
-      start_at: isMulti ? sortedStarts[0] : new Date(value("start_at")).toISOString(),
-      end_at: isMulti ? sortedEnds.at(-1)! : new Date(value("end_at")).toISOString(),
-      registration_start_at: registrationStartMode === "immediate"
-        ? event?.registration_start_at && new Date(event.registration_start_at).getTime() <= Date.now()
-          ? new Date(event.registration_start_at).toISOString()
-          : new Date().toISOString()
-        : new Date(value("registration_start_at")).toISOString(),
-      registration_deadline: new Date(value("registration_deadline")).toISOString(),
+      start_at: startAtIso,
+      end_at: endAtIso,
+      registration_start_at: registrationStartAtIso,
+      registration_deadline: registrationDeadlineIso,
       capacity: isMulti ? totalSessionCapacity : Number(form.get("capacity")),
       status: value("status"),
       registration_methods: methods,
@@ -222,7 +233,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
             <div className="registration-start-options" role="radiogroup" aria-label="選擇開始報名方式">
               <label className={registrationStartMode === "immediate" ? "selected" : ""}>
                 <input type="radio" name="registration_start_mode" value="immediate" checked={registrationStartMode === "immediate"} onChange={() => setRegistrationStartMode("immediate")} />
-                <Zap /><span><strong>即時開始</strong><small>儲存並公開活動後可立即接受報名</small></span>
+                <Zap /><span><strong>即時開始</strong><small>儲存並公開活動後可立即接受報名；如建立過往活動，系統會自動以截止報名時間作為開始報名時間。</small></span>
               </label>
               <label className={registrationStartMode === "scheduled" ? "selected" : ""}>
                 <input type="radio" name="registration_start_mode" value="scheduled" checked={registrationStartMode === "scheduled"} onChange={() => setRegistrationStartMode("scheduled")} />
