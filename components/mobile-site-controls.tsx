@@ -14,8 +14,21 @@ export function MobileFontSizeButton() {
     const enabled = window.localStorage.getItem(STORAGE_KEY) === "1";
     setLarge(enabled);
     document.documentElement.dataset.mobileText = enabled ? "large" : "normal";
+
+    const updateMobileLayout = () => {
+      const coarsePointer = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+      const mobileLayout = window.innerWidth <= 860 || (coarsePointer && window.innerWidth <= 1024);
+      document.documentElement.dataset.mobileLayout = mobileLayout ? "true" : "false";
+    };
+    updateMobileLayout();
+    window.addEventListener("resize", updateMobileLayout);
+    window.addEventListener("orientationchange", updateMobileLayout);
+
     return () => {
+      window.removeEventListener("resize", updateMobileLayout);
+      window.removeEventListener("orientationchange", updateMobileLayout);
       document.documentElement.dataset.mobileText = "normal";
+      delete document.documentElement.dataset.mobileLayout;
     };
   }, []);
 

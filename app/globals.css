@@ -940,3 +940,35 @@ svg { width: 1.05em; height: 1.05em; flex: 0 0 auto; }
   .mobile-home-top-tabs { gap: 6px; padding: 6px; }
   .mobile-home-top-tabs button { min-height: 40px; padding-inline: 6px; font-size: calc(11px * var(--mobile-font-scale)); }
 }
+
+/* Robust touch-device fallback: keeps mobile navigation available even on browsers that report a wider CSS viewport. */
+@media (max-width: 1024px) and (pointer: coarse) {
+  :root { --mobile-font-scale: 1; }
+  html[data-mobile-text="large"] { --mobile-font-scale: 1.16; }
+  body { padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
+  .main-nav { display: none !important; }
+  .mobile-header-actions { display: flex !important; flex: 0 0 auto; align-items: center; justify-content: flex-end; }
+  .mobile-font-size-button { min-width: 104px; min-height: 42px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid #bad3f3; border-radius: 999px; color: var(--blue); background: #fff; box-shadow: 0 5px 14px rgba(19,95,203,.10); cursor: pointer; white-space: nowrap; }
+  .mobile-font-size-button strong { font-size: 19px; line-height: 1; }
+  .mobile-font-size-button span { font-size: 11px; line-height: 1; font-weight: 800; }
+  .mobile-font-size-button.active { background: var(--blue-soft); border-color: #91baf0; }
+  .mobile-bottom-nav { position: fixed !important; z-index: 100; left: 0; right: 0; top: auto !important; bottom: 0 !important; min-height: 68px; padding: 7px max(18px, env(safe-area-inset-left)) calc(7px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-right)); display: grid !important; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; border-top: 1px solid rgba(210,220,232,.95); background: rgba(255,255,255,.98); backdrop-filter: blur(18px); box-shadow: 0 -10px 30px rgba(26,52,82,.08); }
+  .mobile-bottom-nav a { min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 14px; color: #5c6d82; font-size: calc(12px * var(--mobile-font-scale)); font-weight: 800; }
+  .mobile-bottom-nav a.active { color: var(--blue); background: #eef5ff; }
+  .home-hero { display: none; }
+  .mobile-home-top-tabs { display: grid; }
+}
+
+/* Hydrated mobile-layout safety net. This does not affect desktop; it is set only after client-side device checks. */
+html[data-mobile-layout="true"] body { padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
+html[data-mobile-layout="true"] .main-nav { display: none !important; }
+html[data-mobile-layout="true"] .mobile-header-actions { display: flex !important; flex: 0 0 auto; align-items: center; justify-content: flex-end; }
+html[data-mobile-layout="true"] .mobile-font-size-button { min-width: 104px; min-height: 42px; padding: 0 11px; display: inline-flex !important; align-items: center; justify-content: center; gap: 5px; border: 1px solid #bad3f3; border-radius: 999px; color: var(--blue); background: #fff; box-shadow: 0 5px 14px rgba(19,95,203,.10); cursor: pointer; white-space: nowrap; }
+html[data-mobile-layout="true"] .mobile-font-size-button strong { font-size: 19px; line-height: 1; }
+html[data-mobile-layout="true"] .mobile-font-size-button span { font-size: 11px; line-height: 1; font-weight: 800; }
+html[data-mobile-layout="true"] .mobile-font-size-button.active { background: var(--blue-soft); border-color: #91baf0; }
+html[data-mobile-layout="true"] .mobile-bottom-nav { position: fixed !important; z-index: 100; left: 0; right: 0; top: auto !important; bottom: 0 !important; display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; min-height: 68px; padding: 7px max(18px, env(safe-area-inset-left)) calc(7px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-right)); border-top: 1px solid rgba(210,220,232,.95); background: rgba(255,255,255,.98); backdrop-filter: blur(18px); box-shadow: 0 -10px 30px rgba(26,52,82,.08); }
+html[data-mobile-layout="true"] .mobile-bottom-nav a { min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 14px; color: #5c6d82; font-size: calc(12px * var(--mobile-font-scale)); font-weight: 800; }
+html[data-mobile-layout="true"] .mobile-bottom-nav a.active { color: var(--blue); background: #eef5ff; }
+html[data-mobile-layout="true"] .home-hero { display: none; }
+html[data-mobile-layout="true"] .mobile-home-top-tabs { display: grid; }
