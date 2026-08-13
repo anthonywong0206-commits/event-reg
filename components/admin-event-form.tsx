@@ -14,6 +14,29 @@ function localInput(value?: string | null) {
 
 type SessionDraft = Pick<EventSessionRecord, "id" | "session_date" | "start_at" | "end_at" | "capacity" | "confirmed_count" | "sort_order" | "is_active">;
 
+type IntervalGeneratorDraft = {
+  startTime: string;
+  endTime: string;
+  intervalMinutes: number;
+  capacity: number;
+};
+
+function minutesToTime(totalMinutes: number) {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function timeToMinutes(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function dateTimeForSession(sessionDate: string, time: string) {
+  return new Date(`${sessionDate}T${time}:00`);
+}
+
 function defaultSession(): SessionDraft {
   const start = new Date(); start.setDate(start.getDate() + 14); start.setHours(10, 0, 0, 0);
   const end = new Date(start); end.setHours(12, 0, 0, 0);
@@ -36,6 +59,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   );
   const [registrationVisibility, setRegistrationVisibility] = useState<"public" | "private">(event?.registration_visibility === "private" ? "private" : "public");
   const [inviteCode, setInviteCode] = useState("");
+  const [intervalGenerators, setIntervalGenerators] = useState<Record<string, IntervalGeneratorDraft>>({});
 
   function generateInviteCode() {
     const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -97,6 +121,103 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
 
   function removeSession(index: number) {
     setSessions((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function getIntervalGenerator(sessionDate: string, dateSessions: SessionDraft[]): IntervalGeneratorDraft {
+    const existing = intervalGenerators[sessionDate];
+    if (existing) return existing;
+    const latest = [...dateSessions].sort((a, b) => a.end_at.localeCompare(b.end_at)).at(-1);
+    const startTime = latest ? localInput(latest.end_at).slice(11, 16) : "10:00";
+    const startMinutes = timeToMinutes(startTime);
+    return {
+      startTime,
+      endTime: minutesToTime(Math.min(startMinutes + 120, 23 * 60 + 59)),
+      intervalMinutes: 15,
+      capacity: 20,
+    };
+  }
+
+  function updateIntervalGenerator(sessionDate: string, dateSessions: SessionDraft[], patch: Partial<IntervalGeneratorDraft>) {
+    setIntervalGenerators((current) => ({
+      ...current,
+      [sessionDate]: { ...getIntervalGenerator(sessionDate, dateSessions), ...patch },
+    }));
+  }
+
+  function generateIntervalSessions(sessionDate: string, dateSessions: SessionDraft[]) {
+    setError("");
+    const generator = getIntervalGenerator(sessionDate, dateSessions);
+    const interval = Number(generator.intervalMinutes);
+    const capacity = Number(generator.capacity);
+    const startMinutes = timeToMinutes(generator.startTime);
+    const endMinutes = timeToMinutes(generator.endTime);
+
+    if (!Number.isInteger(interval) || interval < 1 || interval > 720) {
+      setError("節數間隔必須為 1 至 720 分鐘的整數");
+      return;
+    }
+    if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100000) {
+      setError("每節名額必須為 1 至 100000 人");
+      return;
+    }
+    if (endMinutes <= startMinutes) {
+      setError("批量產生時段的結束時間必須遲於開始時間");
+      return;
+    }
+    const duration = endMinutes - startMinutes;
+    if (duration % interval !== 0) {
+      setError(`時間區段共 ${duration} 分鐘，未能完整分成每 ${interval} 分鐘一節。請調整結束時間或節數間隔。`);
+      return;
+    }
+
+    const blockStart = dateTimeForSession(sessionDate, generator.startTime).getTime();
+    const blockEnd = dateTimeForSession(sessionDate, generator.endTime).getTime();
+    const overlapping = dateSessions.filter((session) => {
+      const sessionStart = new Date(session.start_at).getTime();
+      const sessionEnd = new Date(session.end_at).getTime();
+      return sessionStart < blockEnd && sessionEnd > blockStart;
+    });
+    const bookedOverlap = overlapping.find((session) => Number(session.confirmed_count || 0) > 0);
+    if (bookedOverlap) {
+      setError(`所選時間區段與已有參加者的時段 ${localInput(bookedOverlap.start_at).slice(11,16)}–${localInput(bookedOverlap.end_at).slice(11,16)} 重疊。為保障報名資料，請先調整時間區段。`);
+      return;
+    }
+
+    const generated: SessionDraft[] = [];
+    for (let cursor = startMinutes; cursor < endMinutes; cursor += interval) {
+      const slotStart = dateTimeForSession(sessionDate, minutesToTime(cursor));
+      const slotEnd = dateTimeForSession(sessionDate, minutesToTime(cursor + interval));
+      generated.push({
+        id: crypto.randomUUID(),
+        session_date: sessionDate,
+        start_at: slotStart.toISOString(),
+        end_at: slotEnd.toISOString(),
+        capacity,
+        confirmed_count: 0,
+        sort_order: 0,
+        is_active: true,
+      });
+    }
+
+    const overlappingIds = new Set(overlapping.map((session) => session.id));
+    setSessions((current) => {
+      const preserved = current.filter((session) => !overlappingIds.has(session.id));
+      return [...preserved, ...generated]
+        .sort((a, b) => a.start_at.localeCompare(b.start_at))
+        .map((session, index) => ({ ...session, sort_order: index }));
+    });
+
+    const nextStart = generator.endTime;
+    const nextStartMinutes = endMinutes;
+    const nextEndMinutes = Math.min(nextStartMinutes + Math.max(60, duration), 23 * 60 + 59);
+    setIntervalGenerators((current) => ({
+      ...current,
+      [sessionDate]: {
+        ...generator,
+        startTime: nextStart,
+        endTime: minutesToTime(nextEndMinutes),
+      },
+    }));
   }
 
   function toggleMethod(method: RegistrationMethod) {
@@ -286,7 +407,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       </section>
 
       {isMulti && <section className="admin-form-section multi-session-builder">
-        <div className="section-heading"><div><h2>活動日期及時段</h2><span>先建立活動日期，再於每個日期下新增不同時段及獨立名額</span></div><button type="button" className="button button-secondary button-small" onClick={addDate}><CalendarPlus />新增日期</button></div>
+        <div className="section-heading"><div><h2>活動日期及時段</h2><span>可手動新增時段，或按開始時間、結束時間及節數間隔批量產生時段</span></div><button type="button" className="button button-secondary button-small" onClick={addDate}><CalendarPlus />新增日期</button></div>
         <div className="multi-date-editor-list">
           {sessionDates.map((sessionDate, dateIndex) => {
             const dateSessions = sessions.filter((item) => item.session_date === sessionDate).sort((a,b)=>a.start_at.localeCompare(b.start_at));
@@ -296,6 +417,25 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
                 <div><CalendarDays /><label><span>活動日期 {dateIndex + 1}</span><input type="date" value={sessionDate} onChange={(e)=>updateDate(sessionDate,e.target.value)} required /></label><strong>當日總名額 {dateCapacity} 人</strong></div>
                 <div><button type="button" className="button button-secondary button-small" onClick={()=>addSessionForDate(sessionDate)}><Plus />新增時段</button><button type="button" className="icon-button danger" onClick={()=>removeDate(sessionDate)} disabled={sessionDates.length===1}><Trash2 /></button></div>
               </header>
+              {(() => {
+                const generator = getIntervalGenerator(sessionDate, dateSessions);
+                const duration = Math.max(0, timeToMinutes(generator.endTime) - timeToMinutes(generator.startTime));
+                const slotCount = generator.intervalMinutes > 0 && duration > 0 && duration % generator.intervalMinutes === 0 ? duration / generator.intervalMinutes : 0;
+                return <div className="interval-session-generator">
+                  <div className="interval-session-generator-heading">
+                    <div><Clock3 /><span><strong>按節數間隔快速產生時段</strong><small>同一日可重複使用不同設定，例如 12:00–14:00 每 15 分鐘，再設定 14:00–16:00 每 30 分鐘。</small></span></div>
+                    {slotCount > 0 && <b>將產生 {slotCount} 節</b>}
+                  </div>
+                  <div className="interval-session-generator-grid">
+                    <label className="field"><span>開始時間</span><input type="time" value={generator.startTime} onChange={(e) => updateIntervalGenerator(sessionDate, dateSessions, { startTime: e.target.value })} /></label>
+                    <label className="field"><span>結束時間</span><input type="time" value={generator.endTime} onChange={(e) => updateIntervalGenerator(sessionDate, dateSessions, { endTime: e.target.value })} /></label>
+                    <label className="field"><span>節數間隔（分鐘）</span><input type="number" min={1} max={720} step={1} value={generator.intervalMinutes} onChange={(e) => updateIntervalGenerator(sessionDate, dateSessions, { intervalMinutes: Number(e.target.value) })} /></label>
+                    <label className="field"><span>每節名額</span><input type="number" min={1} max={100000} step={1} value={generator.capacity} onChange={(e) => updateIntervalGenerator(sessionDate, dateSessions, { capacity: Number(e.target.value) })} /></label>
+                    <button type="button" className="button button-primary interval-generate-button" onClick={() => generateIntervalSessions(sessionDate, dateSessions)}><Plus />產生時段</button>
+                  </div>
+                  <small className="interval-generator-note">如所選區段與未有人報名的既有時段重疊，系統會以新產生的節數取代；如重疊時段已有參加者，系統會停止操作以保障報名資料。</small>
+                </div>;
+              })()}
               <div className="date-session-editor-list">
                 {dateSessions.map((session, sessionIndex) => {
                   const index = sessions.findIndex((item)=>item.id===session.id);
