@@ -6,8 +6,7 @@ import { DEMO_REGISTRATION } from "@/lib/demo-data";
 import { sendRegistrationEmail } from "@/lib/email";
 import { notifyNewRegistration } from "@/lib/telegram";
 import type { EventRecord, RegistrationRecord } from "@/lib/types";
-import { cookies } from "next/headers";
-import { hasInviteAccess, inviteCookieName } from "@/lib/invite-access";
+import { verifyInvitePageAccessToken } from "@/lib/invite-access";
 
 export const runtime = "nodejs";
 
@@ -55,14 +54,14 @@ export async function POST(request: Request) {
     const event = eventData as EventRecord & { invite_code_hash?: string | null };
 
     if (event.registration_visibility === "private") {
-      const cookieStore = await cookies();
-      const accessGranted = hasInviteAccess(
-        cookieStore.get(inviteCookieName(event.id))?.value,
+      const inviteAccessToken = request.headers.get("x-event-invite-access");
+      const accessGranted = verifyInvitePageAccessToken(
+        inviteAccessToken,
         event.id,
         event.invite_code_hash,
       );
       if (!accessGranted) {
-        return NextResponse.json({ error: "此活動屬非公開報名，請先輸入正確邀請碼。" }, { status: 403 });
+        return NextResponse.json({ error: "邀請碼驗證已失效或不正確，請重新進入報名頁並輸入邀請碼。" }, { status: 403 });
       }
     }
 

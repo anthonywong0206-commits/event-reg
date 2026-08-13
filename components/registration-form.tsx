@@ -7,7 +7,7 @@ import type { EventRecord, RegistrationMethod } from "@/lib/types";
 const dateLabel = new Intl.DateTimeFormat("zh-HK", { timeZone:"Asia/Hong_Kong", month:"long", day:"numeric", weekday:"short" });
 const timeLabel = new Intl.DateTimeFormat("zh-HK", { timeZone:"Asia/Hong_Kong", hour:"2-digit", minute:"2-digit", hour12:false });
 
-export function RegistrationForm({ event, initialMethod }: { event: EventRecord; initialMethod: RegistrationMethod }) {
+export function RegistrationForm({ event, initialMethod, inviteAccessToken }: { event: EventRecord; initialMethod: RegistrationMethod; inviteAccessToken?: string | null }) {
   const router = useRouter();
   const activeSessions = useMemo(() => (event.sessions || []).filter((item) => item.is_active && new Date(item.start_at).getTime() > Date.now()).sort((a,b)=>a.start_at.localeCompare(b.start_at)), [event.sessions]);
   const dateGroups = useMemo(() => {
@@ -32,7 +32,7 @@ export function RegistrationForm({ event, initialMethod }: { event: EventRecord;
   async function handleSubmit(formEvent: FormEvent<HTMLFormElement>) {
     formEvent.preventDefault(); setError(""); setSubmitting(true); const form = new FormData(formEvent.currentTarget);
     const payload = { eventId:event.id, sessionId:event.is_multi_session ? sessionId : null, fullName:form.get("fullName"), email:form.get("email"), phone:form.get("phone"), method, notes:form.get("notes")||"", consent:form.get("consent")==="on", website:form.get("website")||"" };
-    try { const response=await fetch("/api/registrations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}); const result=await response.json(); if(!response.ok) throw new Error(result.error||"未能完成報名"); router.push(`/registration/success?token=${encodeURIComponent(result.qr_token)}`); }
+    try { const response=await fetch("/api/registrations",{method:"POST",headers:{"Content-Type":"application/json",...(inviteAccessToken?{"X-Event-Invite-Access":inviteAccessToken}:{})},body:JSON.stringify(payload)}); const result=await response.json(); if(!response.ok) throw new Error(result.error||"未能完成報名"); router.push(`/registration/success?token=${encodeURIComponent(result.qr_token)}`); }
     catch(caught){setError(caught instanceof Error?caught.message:"未能完成報名");setSubmitting(false);}
   }
   const selectedSession=activeSessions.find((item)=>item.id===sessionId);

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isServiceRoleConfigured } from "@/lib/env";
-import { hashInviteCode, inviteAccessToken, inviteCookieName, inviteCookieOptions, safeEqual } from "@/lib/invite-access";
+import { createInvitePageAccessToken, hashInviteCode, safeEqual } from "@/lib/invite-access";
 
 export const runtime = "nodejs";
 
@@ -10,6 +10,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (!isServiceRoleConfigured()) {
       return NextResponse.json({ error: "系統暫時未能驗證邀請碼" }, { status: 503 });
     }
+
     const { slug } = await params;
     const payload = await request.json().catch(() => ({}));
     const inviteCode = typeof payload?.inviteCode === "string" ? payload.inviteCode.trim() : "";
@@ -36,9 +37,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       return NextResponse.json({ error: "邀請碼不正確，請重新輸入" }, { status: 403 });
     }
 
-    const response = NextResponse.json({ ok: true });
-    response.cookies.set(inviteCookieName(event.id), inviteAccessToken(event.id, event.invite_code_hash), inviteCookieOptions());
-    return response;
+    return NextResponse.json({
+      ok: true,
+      accessToken: createInvitePageAccessToken(event.id, event.invite_code_hash),
+    });
   } catch (error) {
     console.error("Invite code verification failed", error);
     return NextResponse.json({ error: "系統暫時未能驗證邀請碼，請稍後再試" }, { status: 500 });
