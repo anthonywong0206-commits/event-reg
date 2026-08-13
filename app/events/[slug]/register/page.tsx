@@ -3,10 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarDays, MapPin, UsersRound } from "lucide-react";
 import { RegistrationForm } from "@/components/registration-form";
+import { InviteCodeGate } from "@/components/invite-code-gate";
 import { EventImage } from "@/components/event-image";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { getEventBySlug } from "@/lib/data";
+import { getEventBySlug, getEventInviteAccessInfo } from "@/lib/data";
+import { cookies } from "next/headers";
+import { hasInviteAccess, inviteCookieName } from "@/lib/invite-access";
 import { eventRegistrationState, formatDateTime, formatEventDate, remainingSeats } from "@/lib/format";
 import type { RegistrationMethod } from "@/lib/types";
 
@@ -19,6 +22,11 @@ export default async function RegisterPage({ params, searchParams }: { params: P
   if (!event) notFound();
   const state = eventRegistrationState(event);
   const method: RegistrationMethod = query.method === "in_person" ? "in_person" : "online";
+  const inviteInfo = event.registration_visibility === "private" ? await getEventInviteAccessInfo(slug) : null;
+  const cookieStore = event.registration_visibility === "private" ? await cookies() : null;
+  const inviteAllowed = event.registration_visibility !== "private" || Boolean(
+    inviteInfo?.invite_code_hash && cookieStore && hasInviteAccess(cookieStore.get(inviteCookieName(inviteInfo.id))?.value, inviteInfo.id, inviteInfo.invite_code_hash),
+  );
 
   return (
     <>
@@ -27,9 +35,15 @@ export default async function RegisterPage({ params, searchParams }: { params: P
         <div className="breadcrumb"><Link href={`/events/${event.slug}`}><ArrowLeft />返回活動詳情</Link></div>
         <div className="register-layout">
           <section className="register-main">
-            <div className="page-title"><span>{state === "waitlist" ? "候補登記表" : "活動報名表"}</span><h1>{state === "waitlist" ? "正選已滿，現只接受候補" : "完成你的活動申請"}</h1><p>{state === "waitlist" ? "候補登記並不代表成功參加；如沒有收到主辦單位進一步通知，則視作未能申請。" : "填寫以下資料後，系統會即時核對名額並發送電子入場證。"}</p></div>
-            {(state === "open" || state === "waitlist") ? <RegistrationForm event={event} initialMethod={method} /> : (
-              <div className="closed-message"><h2>{state === "upcoming" ? "活動尚未開始報名" : state === "full" ? "活動名額已滿" : "報名已截止"}</h2><p>{state === "upcoming" ? `報名將於 ${formatDateTime(event.registration_start_at)} 開放。` : "此活動暫時未能接受新申請。"}</p><Link className="button button-primary" href="/">瀏覽其他活動</Link></div>
+            {!inviteAllowed ? (
+              <InviteCodeGate eventSlug={event.slug} eventTitle={event.title} />
+            ) : (
+              <>
+                <div className="page-title"><span>{state === "waitlist" ? "候補登記表" : "活動報名表"}</span><h1>{state === "waitlist" ? "正選已滿，現只接受候補" : "完成你的活動申請"}</h1><p>{state === "waitlist" ? "候補登記並不代表成功參加；如沒有收到主辦單位進一步通知，則視作未能申請。" : "填寫以下資料後，系統會即時核對名額並發送電子入場證。"}</p></div>
+                {(state === "open" || state === "waitlist") ? <RegistrationForm event={event} initialMethod={method} /> : (
+                  <div className="closed-message"><h2>{state === "upcoming" ? "活動尚未開始報名" : state === "full" ? "活動名額已滿" : "報名已截止"}</h2><p>{state === "upcoming" ? `報名將於 ${formatDateTime(event.registration_start_at)} 開放。` : "此活動暫時未能接受新申請。"}</p><Link className="button button-primary" href="/">瀏覽其他活動</Link></div>
+                )}
+              </>
             )}
           </section>
           <aside className="register-summary-card">

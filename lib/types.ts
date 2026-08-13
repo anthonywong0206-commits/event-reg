@@ -1,6 +1,7 @@
 export type RegistrationMethod = "online" | "in_person";
 export type EventStatus = "draft" | "published" | "cancelled";
 export type RegistrationStatus = "confirmed" | "cancelled" | "waitlist";
+export type RegistrationVisibility = "public" | "private";
 export type HeroButtonPosition = "left" | "center" | "right";
 export type HeroButtonLinkType = "event" | "external";
 
@@ -43,6 +44,8 @@ export interface EventRecord {
   contact_address: string | null;
   is_featured: boolean;
   accepts_waitlist?: boolean;
+  registration_visibility?: RegistrationVisibility;
+  invite_code_configured?: boolean;
   is_multi_session: boolean;
   sessions?: EventSessionRecord[];
   created_at?: string;

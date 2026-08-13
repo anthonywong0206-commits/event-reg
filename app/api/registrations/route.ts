@@ -6,6 +6,8 @@ import { DEMO_REGISTRATION } from "@/lib/demo-data";
 import { sendRegistrationEmail } from "@/lib/email";
 import { notifyNewRegistration } from "@/lib/telegram";
 import type { EventRecord, RegistrationRecord } from "@/lib/types";
+import { cookies } from "next/headers";
+import { hasInviteAccess, inviteCookieName } from "@/lib/invite-access";
 
 export const runtime = "nodejs";
 
@@ -50,7 +52,19 @@ export async function POST(request: Request) {
     if (eventError || !eventData) {
       return NextResponse.json({ error: "找不到活動" }, { status: 404 });
     }
-    const event = eventData as EventRecord;
+    const event = eventData as EventRecord & { invite_code_hash?: string | null };
+
+    if (event.registration_visibility === "private") {
+      const cookieStore = await cookies();
+      const accessGranted = hasInviteAccess(
+        cookieStore.get(inviteCookieName(event.id))?.value,
+        event.id,
+        event.invite_code_hash,
+      );
+      if (!accessGranted) {
+        return NextResponse.json({ error: "此活動屬非公開報名，請先輸入正確邀請碼。" }, { status: 403 });
+      }
+    }
 
     const { data, error } = await admin.rpc("register_for_event", {
       p_event_id: parsed.data.eventId,

@@ -3,6 +3,7 @@ import { assertAdminForApi } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isServiceRoleConfigured } from "@/lib/env";
 import { eventSchema } from "@/lib/validators";
+import { hashInviteCode } from "@/lib/invite-access";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -12,9 +13,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const parsed = eventSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "活動資料不完整" }, { status: 400 });
     const admin = createAdminClient();
-    const { data: existing } = await admin.from("events").select("confirmed_count,is_multi_session").eq("id", id).maybeSingle();
+    const { data: existing } = await admin.from("events").select("confirmed_count,is_multi_session,invite_code_hash").eq("id", id).maybeSingle();
     if (!existing) return NextResponse.json({ error: "找不到活動" }, { status: 404 });
-    const { sessions, ...eventPayload } = parsed.data;
+    const { sessions, invite_code, ...eventPayload } = parsed.data;
+    if (eventPayload.registration_visibility === "private" && !invite_code && !existing.invite_code_hash) {
+      return NextResponse.json({ error: "非公開報名活動必須設定邀請碼" }, { status: 400 });
+    }
     const firstStart = sessions.length ? sessions.map((item) => item.start_at).sort()[0] : eventPayload.start_at;
     const lastEnd = sessions.length ? sessions.map((item) => item.end_at).sort().at(-1)! : eventPayload.end_at;
     const totalCapacity = eventPayload.is_multi_session ? sessions.reduce((sum, item) => sum + item.capacity, 0) : eventPayload.capacity;
@@ -50,7 +54,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       await admin.from("event_sessions").delete().eq("event_id", id);
     }
 
-    const { data, error } = await admin.from("events").update({ ...eventPayload, start_at: firstStart, end_at: lastEnd, capacity: totalCapacity }).eq("id", id).select("*").single();
+    const updatePayload = {
+      ...eventPayload,
+      ...(invite_code ? { invite_code_hash: hashInviteCode(invite_code) } : {}),
+      start_at: firstStart,
+      end_at: lastEnd,
+      capacity: totalCapacity,
+    };
+    const { data, error } = await admin.from("events").update(updatePayload).eq("id", id).select("*").single();
     if (error) throw error;
     return NextResponse.json(data);
   } catch (error) {

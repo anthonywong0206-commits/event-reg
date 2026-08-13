@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CalendarDays, CalendarPlus, Clock3, ImageUp, LoaderCircle, Plus, Save, Trash2, Zap } from "lucide-react";
+import { AlertCircle, CalendarDays, CalendarPlus, Clock3, ImageUp, KeyRound, LoaderCircle, Plus, RefreshCw, Save, Trash2, Zap } from "lucide-react";
 import type { EventRecord, EventSessionRecord, RegistrationMethod } from "@/lib/types";
 
 function localInput(value?: string | null) {
@@ -34,7 +34,15 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   const [registrationStartMode, setRegistrationStartMode] = useState<"immediate" | "scheduled">(
     event && new Date(event.registration_start_at).getTime() > Date.now() ? "scheduled" : "immediate",
   );
+  const [registrationVisibility, setRegistrationVisibility] = useState<"public" | "private">(event?.registration_visibility === "private" ? "private" : "public");
+  const [inviteCode, setInviteCode] = useState("");
 
+  function generateInviteCode() {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const bytes = new Uint32Array(8);
+    crypto.getRandomValues(bytes);
+    setInviteCode(Array.from(bytes, (value) => alphabet[value % alphabet.length]).join(""));
+  }
 
   const sessionDates = useMemo(() => [...new Set(sessions.map((item) => item.session_date))].sort(), [sessions]);
 
@@ -169,6 +177,8 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       contact_address: value("contact_address") || null,
       is_featured: form.get("is_featured") === "on",
       accepts_waitlist: form.get("accepts_waitlist") === "on",
+      registration_visibility: registrationVisibility,
+      invite_code: registrationVisibility === "private" ? (inviteCode.trim() || null) : null,
       is_multi_session: isMulti,
       sessions: normalizedSessions,
     };
@@ -221,6 +231,30 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
           <label className="field"><span>狀態</span><select name="status" defaultValue={event?.status || "draft"}><option value="draft">草稿</option><option value="published">公開</option><option value="cancelled">取消</option></select></label>
           <label className="field checkbox-field"><input type="checkbox" name="is_featured" defaultChecked={event?.is_featured} /><span>設為精選活動</span></label>
         </div>
+      </section>
+
+      <section className="admin-form-section event-access-settings">
+        <div className="section-heading"><h2>報名存取方式</h2><span>設定活動是否需要邀請碼才可進入報名表。</span></div>
+        <div className="registration-visibility-options" role="radiogroup" aria-label="活動報名存取方式">
+          <label className={registrationVisibility === "public" ? "selected" : ""}>
+            <input type="radio" name="registration_visibility" value="public" checked={registrationVisibility === "public"} onChange={() => setRegistrationVisibility("public")} />
+            <span><strong>公開報名</strong><small>與現時一樣，任何人都可進入活動報名頁。</small></span>
+          </label>
+          <label className={registrationVisibility === "private" ? "selected" : ""}>
+            <input type="radio" name="registration_visibility" value="private" checked={registrationVisibility === "private"} onChange={() => setRegistrationVisibility("private")} />
+            <span><strong>非公開報名</strong><small>用戶必須先輸入正確邀請碼，才可進入報名表。</small></span>
+          </label>
+        </div>
+        {registrationVisibility === "private" && (
+          <div className="private-invite-code-panel">
+            <div className="private-invite-code-heading"><KeyRound /><div><strong>活動邀請碼</strong><small>{event?.invite_code_configured ? "此活動已有邀請碼。留空會保留原有邀請碼；輸入或重新產生會取代舊碼。" : "請設定邀請碼，或使用系統自動產生。"}</small></div></div>
+            <div className="invite-code-editor">
+              <label className="field"><span>{event?.invite_code_configured ? "新邀請碼（選填）" : "邀請碼 *"}</span><input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} minLength={4} maxLength={40} placeholder={event?.invite_code_configured ? "留空沿用原邀請碼" : "最少 4 個字元"} /></label>
+              <button type="button" className="button button-secondary" onClick={generateInviteCode}><RefreshCw />產生邀請碼</button>
+            </div>
+            {inviteCode && <div className="generated-invite-code"><span>目前設定的新邀請碼</span><strong>{inviteCode}</strong><small>請在儲存活動後將此邀請碼提供給獲邀人士。</small></div>}
+          </div>
+        )}
       </section>
 
       <section className="admin-form-section">

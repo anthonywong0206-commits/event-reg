@@ -81,6 +81,8 @@ export const eventSchema = z
     contact_address: z.string().trim().max(300).nullable().optional(),
     is_featured: z.boolean().default(false),
     accepts_waitlist: z.boolean().default(false),
+    registration_visibility: z.enum(["public", "private"]).default("public"),
+    invite_code: z.string().trim().min(4, "邀請碼最少需要 4 個字元").max(40, "邀請碼不可超過 40 個字元").nullable().optional(),
     is_multi_session: z.boolean().default(false),
     sessions: z.array(eventSessionSchema).optional().default([]),
   })

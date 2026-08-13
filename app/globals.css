@@ -972,3 +972,46 @@ html[data-mobile-layout="true"] .mobile-bottom-nav a { min-height: 52px; display
 html[data-mobile-layout="true"] .mobile-bottom-nav a.active { color: var(--blue); background: #eef5ff; }
 html[data-mobile-layout="true"] .home-hero { display: none; }
 html[data-mobile-layout="true"] .mobile-home-top-tabs { display: grid; }
+
+/* Public / private registration access */
+.registration-visibility-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 8px; }
+.registration-visibility-options > label { display: grid; grid-template-columns: auto 1fr; align-items: flex-start; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #fff; cursor: pointer; transition: border-color .18s ease, background .18s ease, box-shadow .18s ease; }
+.registration-visibility-options > label.selected { border-color: var(--blue); background: var(--blue-soft); box-shadow: inset 0 0 0 1px var(--blue); }
+.registration-visibility-options input { margin-top: 5px; }
+.registration-visibility-options span { display: grid; gap: 5px; }
+.registration-visibility-options strong { font-size: 14px; }
+.registration-visibility-options small { color: var(--muted); font-size: 11px; line-height: 1.55; }
+.private-invite-code-panel { margin-top: 16px; padding: 18px; border: 1px solid #c8d9ef; border-radius: 16px; background: #f7faff; }
+.private-invite-code-heading { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+.private-invite-code-heading > svg { width: 22px; height: 22px; margin-top: 1px; color: var(--blue); }
+.private-invite-code-heading > div { display: grid; gap: 4px; }
+.private-invite-code-heading strong { font-size: 14px; }
+.private-invite-code-heading small { color: var(--muted); font-size: 11px; line-height: 1.55; }
+.invite-code-editor { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; }
+.generated-invite-code { display: grid; gap: 5px; margin-top: 14px; padding: 13px 15px; border: 1px solid #b9d2f2; border-radius: 12px; background: #fff; }
+.generated-invite-code span, .generated-invite-code small { color: var(--muted); font-size: 10px; }
+.generated-invite-code strong { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 21px; letter-spacing: .08em; color: var(--blue-dark); overflow-wrap: anywhere; }
+.private-registration-notice { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; padding: 13px 14px; border: 1px solid #c8d9ef; border-radius: 13px; background: #f5f9ff; color: #274b75; }
+.private-registration-notice > svg { width: 20px; height: 20px; margin-top: 1px; flex: 0 0 auto; }
+.private-registration-notice span { display: grid; gap: 3px; }
+.private-registration-notice strong { font-size: 13px; }
+.private-registration-notice small { font-size: 11px; line-height: 1.5; }
+.invite-code-gate { max-width: 650px; margin: 0 auto; padding: 34px; border: 1px solid var(--line); border-radius: 24px; background: #fff; box-shadow: var(--shadow-sm); text-align: center; }
+.invite-code-gate-icon { display: grid; place-items: center; width: 62px; height: 62px; margin: 0 auto 16px; border-radius: 20px; color: var(--blue); background: var(--blue-soft); }
+.invite-code-gate-icon svg { width: 28px; height: 28px; }
+.invite-code-gate > p { margin: 0; color: var(--blue); font-size: 11px; font-weight: 850; letter-spacing: .12em; }
+.invite-code-gate > h1 { margin: 7px 0 10px; font-family: Georgia, "Noto Serif TC", serif; font-size: 36px; line-height: 1.15; }
+.invite-code-gate > span { display: block; max-width: 520px; margin: 0 auto; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.invite-code-gate form { display: grid; gap: 14px; margin-top: 24px; text-align: left; }
+.invite-code-gate .field > span { display: inline-flex; align-items: center; gap: 7px; }
+.invite-code-gate .button { width: 100%; }
+.invite-code-gate > small { display: block; margin-top: 18px; color: var(--muted); font-size: 10px; line-height: 1.55; }
+
+@media (max-width: 700px) {
+  .registration-visibility-options { grid-template-columns: 1fr; }
+  .invite-code-editor { grid-template-columns: 1fr; }
+  .invite-code-editor .button { width: 100%; }
+  .invite-code-gate { padding: 26px 18px; border-radius: 19px; }
+  .invite-code-gate > h1 { font-size: calc(30px * var(--mobile-font-scale, 1)); }
+  .invite-code-gate > span { font-size: calc(13px * var(--mobile-font-scale, 1)); }
+}

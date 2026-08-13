@@ -3,6 +3,7 @@ import { assertAdminForApi } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isServiceRoleConfigured } from "@/lib/env";
 import { eventSchema } from "@/lib/validators";
+import { hashInviteCode } from "@/lib/invite-access";
 
 export async function POST(request: Request) {
   try {
@@ -11,7 +12,10 @@ export async function POST(request: Request) {
     const parsed = eventSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "活動資料不完整" }, { status: 400 });
     const admin = createAdminClient();
-    const { sessions, ...eventPayload } = parsed.data;
+    const { sessions, invite_code, ...eventPayload } = parsed.data;
+    if (eventPayload.registration_visibility === "private" && !invite_code) {
+      return NextResponse.json({ error: "非公開報名活動必須設定邀請碼" }, { status: 400 });
+    }
     const firstStart = sessions.length ? sessions.map((item) => item.start_at).sort()[0] : eventPayload.start_at;
     const lastEnd = sessions.length ? sessions.map((item) => item.end_at).sort().at(-1)! : eventPayload.end_at;
     const totalCapacity = eventPayload.is_multi_session ? sessions.reduce((sum, item) => sum + item.capacity, 0) : eventPayload.capacity;
@@ -20,6 +24,7 @@ export async function POST(request: Request) {
       start_at: firstStart,
       end_at: lastEnd,
       capacity: totalCapacity,
+      invite_code_hash: invite_code ? hashInviteCode(invite_code) : null,
       created_by: user.id,
     }).select("*").single();
     if (error) {
