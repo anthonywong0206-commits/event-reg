@@ -4,6 +4,21 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isServiceRoleConfigured } from "@/lib/env";
 import { eventSchema } from "@/lib/validators";
 import { hashInviteCode } from "@/lib/invite-access";
+function hongKongDateFromIso(value: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Hong_Kong",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function validateSessionDates(sessions: Array<{ session_date: string; start_at: string; end_at: string }>) {
+  return sessions.find((session) => hongKongDateFromIso(session.start_at) !== session.session_date || hongKongDateFromIso(session.end_at) !== session.session_date);
+}
+
 
 export async function POST(request: Request) {
   try {
@@ -13,6 +28,8 @@ export async function POST(request: Request) {
     if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || "活動資料不完整" }, { status: 400 });
     const admin = createAdminClient();
     const { sessions, invite_code, ...eventPayload } = parsed.data;
+    const mismatchedSession = validateSessionDates(sessions);
+    if (mismatchedSession) return NextResponse.json({ error: `活動時段日期與時間不一致：${mismatchedSession.session_date}。請重新選擇該日的開始及結束時間。` }, { status: 400 });
     if (eventPayload.registration_visibility === "private" && !invite_code) {
       return NextResponse.json({ error: "非公開報名活動必須設定邀請碼" }, { status: 400 });
     }

@@ -12,6 +12,22 @@ function localInput(value?: string | null) {
   return date.toISOString().slice(0, 16);
 }
 
+const hongKongTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Hong_Kong",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+function hongKongTime(value?: string | null) {
+  if (!value) return "";
+  return hongKongTimeFormatter.format(new Date(value));
+}
+
+function hongKongSessionIso(sessionDate: string, time: string) {
+  return new Date(`${sessionDate}T${time}:00+08:00`).toISOString();
+}
+
 type SessionDraft = Pick<EventSessionRecord, "id" | "session_date" | "start_at" | "end_at" | "capacity" | "confirmed_count" | "sort_order" | "is_active">;
 
 type IntervalGeneratorDraft = {
@@ -19,6 +35,10 @@ type IntervalGeneratorDraft = {
   endTime: string;
   intervalMinutes: number;
   capacity: number;
+};
+
+type InferredIntervalBlock = IntervalGeneratorDraft & {
+  slotCount: number;
 };
 
 function minutesToTime(totalMinutes: number) {
@@ -34,13 +54,14 @@ function timeToMinutes(value: string) {
 }
 
 function dateTimeForSession(sessionDate: string, time: string) {
-  return new Date(`${sessionDate}T${time}:00`);
+  return new Date(hongKongSessionIso(sessionDate, time));
 }
 
 function defaultSession(): SessionDraft {
-  const start = new Date(); start.setDate(start.getDate() + 14); start.setHours(10, 0, 0, 0);
-  const end = new Date(start); end.setHours(12, 0, 0, 0);
-  return { id: crypto.randomUUID(), session_date: start.toISOString().slice(0,10), start_at: start.toISOString(), end_at: end.toISOString(), capacity: 20, confirmed_count: 0, sort_order: 0, is_active: true };
+  const date = new Date();
+  date.setDate(date.getDate() + 14);
+  const sessionDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Hong_Kong", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  return { id: crypto.randomUUID(), session_date: sessionDate, start_at: hongKongSessionIso(sessionDate, "10:00"), end_at: hongKongSessionIso(sessionDate, "12:00"), capacity: 20, confirmed_count: 0, sort_order: 0, is_active: true };
 }
 
 export function AdminEventForm({ event, forceMulti = false }: { event?: EventRecord | null; forceMulti?: boolean }) {
@@ -77,11 +98,9 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       const date = new Date(`${lastDate}T12:00:00`);
       date.setDate(date.getDate() + 1);
       const nextDate = date.toISOString().slice(0, 10);
-      const start = new Date(`${nextDate}T10:00:00`);
-      const end = new Date(`${nextDate}T12:00:00`);
       next.session_date = nextDate;
-      next.start_at = start.toISOString();
-      next.end_at = end.toISOString();
+      next.start_at = hongKongSessionIso(nextDate, "10:00");
+      next.end_at = hongKongSessionIso(nextDate, "12:00");
     }
     setSessions((current) => [...current, { ...next, sort_order: current.length }]);
   }
@@ -89,25 +108,32 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   function addSessionForDate(sessionDate: string) {
     const sameDate = sessions.filter((item) => item.session_date === sessionDate).sort((a,b)=>a.start_at.localeCompare(b.start_at));
     const previous = sameDate.at(-1);
-    const start = previous ? new Date(previous.end_at) : new Date(`${sessionDate}T10:00:00`);
-    const end = new Date(start); end.setHours(end.getHours() + 2);
+    const startTime = previous ? hongKongTime(previous.end_at) : "10:00";
+    const startMinutes = timeToMinutes(startTime);
+    const endTime = minutesToTime(Math.min(startMinutes + 120, 23 * 60 + 59));
     const next = defaultSession();
     next.session_date = sessionDate;
-    next.start_at = start.toISOString();
-    next.end_at = end.toISOString();
+    next.start_at = hongKongSessionIso(sessionDate, startTime);
+    next.end_at = hongKongSessionIso(sessionDate, endTime);
     setSessions((current) => [...current, { ...next, sort_order: current.length }]);
   }
 
   function updateDate(oldDate: string, newDate: string) {
     setSessions((current) => current.map((item) => {
       if (item.session_date !== oldDate) return item;
-      const start = new Date(item.start_at);
-      const end = new Date(item.end_at);
-      const [year, month, day] = newDate.split("-").map(Number);
-      start.setFullYear(year, month - 1, day);
-      end.setFullYear(year, month - 1, day);
-      return { ...item, session_date: newDate, start_at: start.toISOString(), end_at: end.toISOString() };
+      return {
+        ...item,
+        session_date: newDate,
+        start_at: hongKongSessionIso(newDate, hongKongTime(item.start_at)),
+        end_at: hongKongSessionIso(newDate, hongKongTime(item.end_at)),
+      };
     }));
+    setIntervalGenerators((current) => {
+      if (!current[oldDate]) return current;
+      const next = { ...current, [newDate]: current[oldDate] };
+      delete next[oldDate];
+      return next;
+    });
   }
 
   function removeDate(sessionDate: string) {
@@ -123,11 +149,36 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
     setSessions((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
 
+  function inferIntervalBlocks(dateSessions: SessionDraft[]): InferredIntervalBlock[] {
+    const ordered = [...dateSessions].sort((a, b) => a.start_at.localeCompare(b.start_at));
+    const blocks: InferredIntervalBlock[] = [];
+    for (const session of ordered) {
+      const startTime = hongKongTime(session.start_at);
+      const endTime = hongKongTime(session.end_at);
+      const intervalMinutes = timeToMinutes(endTime) - timeToMinutes(startTime);
+      if (intervalMinutes <= 0) continue;
+      const previous = blocks.at(-1);
+      if (previous && previous.endTime === startTime && previous.intervalMinutes === intervalMinutes && previous.capacity === Number(session.capacity)) {
+        previous.endTime = endTime;
+        previous.slotCount += 1;
+      } else {
+        blocks.push({ startTime, endTime, intervalMinutes, capacity: Number(session.capacity), slotCount: 1 });
+      }
+    }
+    return blocks;
+  }
+
   function getIntervalGenerator(sessionDate: string, dateSessions: SessionDraft[]): IntervalGeneratorDraft {
     const existing = intervalGenerators[sessionDate];
     if (existing) return existing;
+    if (event) {
+      const inferred = inferIntervalBlocks(dateSessions)[0];
+      if (inferred) {
+        return { startTime: inferred.startTime, endTime: inferred.endTime, intervalMinutes: inferred.intervalMinutes, capacity: inferred.capacity };
+      }
+    }
     const latest = [...dateSessions].sort((a, b) => a.end_at.localeCompare(b.end_at)).at(-1);
-    const startTime = latest ? localInput(latest.end_at).slice(11, 16) : "10:00";
+    const startTime = latest ? hongKongTime(latest.end_at) : "10:00";
     const startMinutes = timeToMinutes(startTime);
     return {
       startTime,
@@ -179,7 +230,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
     });
     const bookedOverlap = overlapping.find((session) => Number(session.confirmed_count || 0) > 0);
     if (bookedOverlap) {
-      setError(`所選時間區段與已有參加者的時段 ${localInput(bookedOverlap.start_at).slice(11,16)}–${localInput(bookedOverlap.end_at).slice(11,16)} 重疊。為保障報名資料，請先調整時間區段。`);
+      setError(`所選時間區段與已有參加者的時段 ${hongKongTime(bookedOverlap.start_at)}–${hongKongTime(bookedOverlap.end_at)} 重疊。為保障報名資料，請先調整時間區段。`);
       return;
     }
 
@@ -252,12 +303,18 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
     const normalizedSessions = sessions.map((session, index) => ({
       ...(event?.sessions?.some((item) => item.id === session.id) ? { id: session.id } : {}),
       session_date: session.session_date,
-      start_at: new Date(session.start_at).toISOString(),
-      end_at: new Date(session.end_at).toISOString(),
+      start_at: hongKongSessionIso(session.session_date, hongKongTime(session.start_at)),
+      end_at: hongKongSessionIso(session.session_date, hongKongTime(session.end_at)),
       capacity: Number(session.capacity),
       sort_order: index,
       is_active: session.is_active,
     }));
+    const invalidSession = normalizedSessions.find((item) => new Date(item.end_at).getTime() <= new Date(item.start_at).getTime());
+    if (invalidSession) {
+      setError(`${invalidSession.session_date} 有時段的結束時間必須遲於開始時間`);
+      setSaving(false);
+      return;
+    }
     const sortedStarts = normalizedSessions.map((item) => item.start_at).sort();
     const sortedEnds = normalizedSessions.map((item) => item.end_at).sort();
     const startAtIso = isMulti ? sortedStarts[0] : new Date(value("start_at")).toISOString();
@@ -419,6 +476,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
               </header>
               {(() => {
                 const generator = getIntervalGenerator(sessionDate, dateSessions);
+                const savedBlocks = inferIntervalBlocks(dateSessions);
                 const duration = Math.max(0, timeToMinutes(generator.endTime) - timeToMinutes(generator.startTime));
                 const slotCount = generator.intervalMinutes > 0 && duration > 0 && duration % generator.intervalMinutes === 0 ? duration / generator.intervalMinutes : 0;
                 return <div className="interval-session-generator">
@@ -426,6 +484,21 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
                     <div><Clock3 /><span><strong>按節數間隔快速產生時段</strong><small>同一日可重複使用不同設定，例如 12:00–14:00 每 15 分鐘，再設定 14:00–16:00 每 30 分鐘。</small></span></div>
                     {slotCount > 0 && <b>將產生 {slotCount} 節</b>}
                   </div>
+                  {event && savedBlocks.length > 0 && <div className="saved-interval-blocks">
+                    <strong>目前已儲存的節數設定</strong>
+                    <div>
+                      {savedBlocks.map((block, blockIndex) => <button
+                        type="button"
+                        key={`${block.startTime}-${block.endTime}-${blockIndex}`}
+                        className="saved-interval-block"
+                        onClick={() => updateIntervalGenerator(sessionDate, dateSessions, { startTime: block.startTime, endTime: block.endTime, intervalMinutes: block.intervalMinutes, capacity: block.capacity })}
+                      >
+                        <span>{block.startTime}–{block.endTime}</span>
+                        <small>每 {block.intervalMinutes} 分鐘 · {block.slotCount} 節 · 每節 {block.capacity} 人</small>
+                      </button>)}
+                    </div>
+                    <small>點擊任何一組即可載入到下方修改。重新儲存後會按活動日期及香港時間完整保留。</small>
+                  </div>}
                   <div className="interval-session-generator-grid">
                     <label className="field"><span>開始時間</span><input type="time" value={generator.startTime} onChange={(e) => updateIntervalGenerator(sessionDate, dateSessions, { startTime: e.target.value })} /></label>
                     <label className="field"><span>結束時間</span><input type="time" value={generator.endTime} onChange={(e) => updateIntervalGenerator(sessionDate, dateSessions, { endTime: e.target.value })} /></label>
@@ -441,8 +514,8 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
                   const index = sessions.findIndex((item)=>item.id===session.id);
                   return <section className="date-session-editor-row" key={session.id}>
                     <strong>時段 {sessionIndex + 1}</strong>
-                    <label className="field"><span>開始時間 *</span><input type="time" value={localInput(session.start_at).slice(11,16)} onChange={(e) => { const date=new Date(session.start_at); const [h,m]=e.target.value.split(':').map(Number); date.setHours(h,m,0,0); updateSession(index,{start_at:date.toISOString()}); }} required /></label>
-                    <label className="field"><span>結束時間 *</span><input type="time" value={localInput(session.end_at).slice(11,16)} onChange={(e) => { const date=new Date(session.end_at); const [h,m]=e.target.value.split(':').map(Number); date.setHours(h,m,0,0); updateSession(index,{end_at:date.toISOString()}); }} required /></label>
+                    <label className="field"><span>開始時間 *</span><input type="time" value={hongKongTime(session.start_at)} onChange={(e) => updateSession(index,{start_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label>
+                    <label className="field"><span>結束時間 *</span><input type="time" value={hongKongTime(session.end_at)} onChange={(e) => updateSession(index,{end_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label>
                     <label className="field"><span>人數上限 *</span><input type="number" min={Math.max(1, session.confirmed_count || 0)} value={session.capacity} onChange={(e) => updateSession(index,{capacity:Number(e.target.value)})} required /><small>{event ? `已確認 ${session.confirmed_count || 0} 人；可增加名額。` : "此時段正選名額"}</small></label>
                     <label className="field checkbox-field"><input type="checkbox" checked={session.is_active} onChange={(e) => updateSession(index,{is_active:e.target.checked})} /><span>開放</span></label>
                     <button type="button" className="icon-button danger" onClick={() => removeSession(index)} disabled={sessions.length === 1 || dateSessions.length === 1}><Trash2 /></button>
