@@ -73,7 +73,11 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   const [heroUrl, setHeroUrl] = useState(event?.hero_image_url || "/images/hero-community.jpg");
   const [methods, setMethods] = useState<RegistrationMethod[]>(event?.registration_methods || ["online", "in_person"]);
   const isMulti = forceMulti || Boolean(event?.is_multi_session);
-  const [sessions, setSessions] = useState<SessionDraft[]>(event?.sessions?.length ? event.sessions.map((item) => ({ ...item })) : isMulti ? [defaultSession()] : []);
+  const [sessions, setSessions] = useState<SessionDraft[]>(event?.sessions?.length ? event.sessions.map((item) => ({
+    ...item,
+    start_at: hongKongSessionIso(item.session_date, hongKongTime(item.start_at)),
+    end_at: hongKongSessionIso(item.session_date, hongKongTime(item.end_at)),
+  })) : isMulti ? [defaultSession()] : []);
   const totalSessionCapacity = useMemo(() => sessions.reduce((sum, item) => sum + Number(item.capacity || 0), 0), [sessions]);
   const [registrationStartMode, setRegistrationStartMode] = useState<"immediate" | "scheduled">(
     event && new Date(event.registration_start_at).getTime() > Date.now() ? "scheduled" : "immediate",
