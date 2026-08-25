@@ -292,3 +292,12 @@ Participant email is optional for both public registration and administrator-man
 ## Excel 批量匯入參加者
 
 管理員可在活動的「參加者名單」頁下載該活動專用的 `.xlsx` 範本並上傳匯入。多時段活動的範本會包含「可選時段」工作表；匯入時以活動日期及開始時間配對時段。每次最多 500 筆、5MB。系統會逐行驗證並回報失敗行，不會因個別錯誤中止其他有效資料。
+
+
+## 管理員登入安全
+
+- 管理員登入使用 Supabase Auth。
+- 完整管理權限由 `public.admin_profiles.role = 'admin'` 授予。
+- 網站前台不提供修改或重設管理員密碼功能；帳戶登入資料應由 Supabase Auth 管理。
+- 不要把管理員密碼寫入程式碼、Migration 或 Git 儲存庫。
+
