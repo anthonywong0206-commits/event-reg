@@ -22,7 +22,7 @@ export default async function AdminLoginPage({ searchParams }: { searchParams: P
       <section className="admin-login-card">
         <div><p className="admin-eyebrow">ADMIN PORTAL</p><h2>管理員登入</h2><p>請使用已加入 admin_profiles 的 Supabase Auth 帳戶。</p></div>
         <LoginForm nextPath={next} configured={isSupabaseConfigured()} />
-        <small>首次設定請參閱專案 README 的「建立首位管理員」章節。</small>
+        <small>管理員密碼只由 Supabase Auth 管理；網站前台不提供修改或重設密碼功能。</small>
       </section>
     </main>
   );
