@@ -1,0 +1,12 @@
+REPLACE:
+components/admin-event-form.tsx
+app/api/admin/upload/route.ts
+lib/types.ts
+
+ADD:
+lib/api-response.ts
+supabase/migrations/202609090001_add_external_registration.sql
+
+NO CHANGE REQUIRED:
+vercel.json
+package.json

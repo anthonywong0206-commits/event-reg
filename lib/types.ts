@@ -134,7 +134,6 @@ export interface TelegramNotificationQueueRecord {
   created_at: string;
 }
 
-
 export type EmailTemplateKey = "standard" | "friendly" | "concise" | "custom";
 
 export interface EmailNotificationSettingsRecord {

@@ -4,6 +4,11 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CalendarDays, CalendarPlus, Clock3, ImageUp, KeyRound, LoaderCircle, Plus, RefreshCw, Save, Trash2, Zap } from "lucide-react";
 import type { EventRecord, EventSessionRecord, RegistrationMethod } from "@/lib/types";
+import { readApiResponse } from "@/lib/api-response";
+import { createClient } from "@/lib/supabase/client";
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function localInput(value?: string | null) {
   if (!value) return "";
@@ -283,12 +288,36 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   async function upload(file: File, target: "poster" | "hero") {
     setUploading(true);
     setError("");
-    const body = new FormData();
-    body.append("file", file);
+
+    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+      setError("只支援 JPG、PNG 或 WebP 圖片");
+      setUploading(false);
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError("圖片不可大於 8MB，請先壓縮圖片後再試。");
+      setUploading(false);
+      return;
+    }
+
     try {
-      const response = await fetch("/api/admin/upload", { method: "POST", body });
-      const result = await response.json();
+      // Only small metadata is sent through Vercel. The image itself uploads
+      // directly to Supabase Storage using a short-lived signed upload token.
+      const response = await fetch("/api/admin/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, type: file.type, size: file.size }),
+      });
+      const result = await readApiResponse<{ path: string; token: string; url: string }>(response);
       if (!response.ok) throw new Error(result.error || "圖片上載失敗");
+      if (!result.path || !result.token || !result.url) throw new Error("圖片上載服務回傳資料不完整");
+
+      const supabase = createClient();
+      const { error: uploadError } = await supabase.storage
+        .from("event-media")
+        .uploadToSignedUrl(result.path, result.token, file);
+      if (uploadError) throw uploadError;
+
       if (target === "poster") setPosterUrl(result.url);
       else setHeroUrl(result.url);
     } catch (caught) {
@@ -375,7 +404,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const result = await response.json();
+      const result = await readApiResponse(response);
       if (!response.ok) throw new Error(result.error || "未能儲存活動");
       router.push("/admin");
       router.refresh();
@@ -391,7 +420,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
     setError("");
     try {
       const response = await fetch(`/api/admin/events/${event.id}`, { method: "DELETE" });
-      const result = await response.json();
+      const result = await readApiResponse(response);
       if (!response.ok) throw new Error(result.error || "未能刪除活動");
       router.push("/admin");
       router.refresh();
