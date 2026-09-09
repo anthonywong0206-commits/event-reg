@@ -83,6 +83,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
     event && new Date(event.registration_start_at).getTime() > Date.now() ? "scheduled" : "immediate",
   );
   const [registrationVisibility, setRegistrationVisibility] = useState<"public" | "private">(event?.registration_visibility === "private" ? "private" : "public");
+  const [externalRegistration, setExternalRegistration] = useState(Boolean(event?.external_registration));
   const [inviteCode, setInviteCode] = useState("");
   const [intervalGenerators, setIntervalGenerators] = useState<Record<string, IntervalGeneratorDraft>>({});
 
@@ -360,7 +361,10 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       is_featured: form.get("is_featured") === "on",
       accepts_waitlist: form.get("accepts_waitlist") === "on",
       registration_visibility: registrationVisibility,
-      invite_code: registrationVisibility === "private" ? (inviteCode.trim() || null) : null,
+      invite_code: !externalRegistration && registrationVisibility === "private" ? (inviteCode.trim() || null) : null,
+      external_registration: externalRegistration,
+      external_registration_url: externalRegistration ? (value("external_registration_url") || null) : null,
+      external_registration_organization: externalRegistration ? (value("external_registration_organization") || null) : null,
       is_multi_session: isMulti,
       sessions: normalizedSessions,
     };
@@ -415,19 +419,32 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
         </div>
       </section>
 
+      <section className="admin-form-section external-registration-settings">
+        <div className="section-heading"><h2>外部連結報名</h2><span>如由其他機構或外部系統負責收集報名，可將用戶導向指定網址。</span></div>
+        <label className="field checkbox-field field-full external-registration-toggle">
+          <input type="checkbox" checked={externalRegistration} onChange={(e) => setExternalRegistration(e.target.checked)} />
+          <span><strong>使用外部連結報名</strong><small>啟用後，前台不會顯示本系統報名人數／剩餘名額，亦不會使用本網站的報名表。</small></span>
+        </label>
+        {externalRegistration && <div className="form-grid external-registration-fields">
+          <label className="field"><span>負責機構 *</span><input name="external_registration_organization" required defaultValue={event?.external_registration_organization || ""} placeholder="例如：聖公會聖匠堂長者地區中心" /></label>
+          <label className="field"><span>外部報名網址 *</span><input name="external_registration_url" type="url" required defaultValue={event?.external_registration_url || ""} placeholder="https://..." /></label>
+          <div className="notice notice-info field-full"><AlertCircle /><div><strong>前台會先顯示離站提示</strong><span>用戶同意「你正離開網站報名，前往『負責機構』提供的報名連結」後，才會開啟外部網址。</span></div></div>
+        </div>}
+      </section>
+
       <section className="admin-form-section event-access-settings">
-        <div className="section-heading"><h2>報名存取方式</h2><span>設定活動是否需要邀請碼才可進入報名表。</span></div>
+        <div className="section-heading"><h2>報名存取方式</h2><span>{externalRegistration ? "外部連結報名已啟用，本設定暫不會套用到前台。" : "設定活動是否需要邀請碼才可進入報名表。"}</span></div>
         <div className="registration-visibility-options" role="radiogroup" aria-label="活動報名存取方式">
           <label className={registrationVisibility === "public" ? "selected" : ""}>
-            <input type="radio" name="registration_visibility" value="public" checked={registrationVisibility === "public"} onChange={() => setRegistrationVisibility("public")} />
+            <input type="radio" name="registration_visibility" value="public" checked={registrationVisibility === "public"} disabled={externalRegistration} onChange={() => setRegistrationVisibility("public")} />
             <span><strong>公開報名</strong><small>與現時一樣，任何人都可進入活動報名頁。</small></span>
           </label>
           <label className={registrationVisibility === "private" ? "selected" : ""}>
-            <input type="radio" name="registration_visibility" value="private" checked={registrationVisibility === "private"} onChange={() => setRegistrationVisibility("private")} />
+            <input type="radio" name="registration_visibility" value="private" checked={registrationVisibility === "private"} disabled={externalRegistration} onChange={() => setRegistrationVisibility("private")} />
             <span><strong>非公開報名</strong><small>用戶必須先輸入正確邀請碼，才可進入報名表。</small></span>
           </label>
         </div>
-        {registrationVisibility === "private" && (
+        {!externalRegistration && registrationVisibility === "private" && (
           <div className="private-invite-code-panel">
             <div className="private-invite-code-heading"><KeyRound /><div><strong>活動邀請碼</strong><small>{event?.invite_code_configured ? "此活動已有邀請碼。留空會保留原有邀請碼；輸入或重新產生會取代舊碼。" : "請設定邀請碼，或使用系統自動產生。"}</small></div></div>
             <div className="invite-code-editor">

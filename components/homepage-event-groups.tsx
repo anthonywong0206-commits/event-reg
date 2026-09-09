@@ -68,6 +68,8 @@ function getEventStatus(event: EventRecord, kind: GroupKind) {
     };
   }
 
+  if (event.external_registration) return { text: "外部連結報名", tone: "external" };
+
   if (event.is_multi_session) {
     return {
       text: `多日期活動｜報名狀況：${capacitySignal(event).label}`,

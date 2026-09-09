@@ -2,13 +2,24 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Building2, CheckCircle2, KeyRound, Laptop, MapPinned } from "lucide-react";
+import { Building2, CheckCircle2, ExternalLink, KeyRound, Laptop, MapPinned } from "lucide-react";
+import { ExternalRegistrationButton } from "@/components/external-registration-button";
 import type { EventRecord, RegistrationMethod } from "@/lib/types";
 import { eventRegistrationState, formatDateTime } from "@/lib/format";
 
 export function EventDetailActions({ event }: { event: EventRecord }) {
   const [method, setMethod] = useState<RegistrationMethod>(event.registration_methods[0] ?? "online");
   const state = eventRegistrationState(event);
+
+  if (event.external_registration && event.external_registration_url && event.external_registration_organization) {
+    return <section className="registration-options external-registration-option" aria-labelledby="registration-options-title">
+      <h2 id="registration-options-title">外部連結報名</h2>
+      <div className="external-registration-provider"><ExternalLink /><div><strong>由 {event.external_registration_organization} 負責報名</strong><p>本網站不會收集此活動的報名資料。點擊下方按鈕後會先顯示離站提醒。</p></div></div>
+      {state === "open"
+        ? <ExternalRegistrationButton url={event.external_registration_url} organization={event.external_registration_organization} />
+        : <button className="button button-disabled button-large" disabled>{state === "upcoming" ? `將於 ${formatDateTime(event.registration_start_at)} 開始報名` : "報名已截止"}</button>}
+    </section>;
+  }
 
   return (
     <section className="registration-options" aria-labelledby="registration-options-title">
