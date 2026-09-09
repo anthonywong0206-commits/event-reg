@@ -118,7 +118,12 @@ function applyListLayout(ws: XLSX.WorkSheet, lastRow: number) {
   };
 
   setCellStyle(ws, "A1", titleStyle);
-  ["A2", "A3", "A4"].forEach((address) => setCellStyle(ws, address, infoStyle));
+  ["A2", "A3", "A4", "A5"].forEach((address) => {
+    const value = ws[address]?.v;
+    if (typeof value === "string" && (value.startsWith("活動名稱：") || value.startsWith("日期：") || value.startsWith("時間：") || value.startsWith("參加者人數總數："))) {
+      setCellStyle(ws, address, infoStyle);
+    }
+  });
 
   for (let row = 5; row <= lastRow; row += 1) {
     const marker = ws[`A${row}`]?.v;
@@ -143,14 +148,14 @@ function buildSheet(options: {
   dateLabel: string;
   overallTimeLabel: string;
   sessionGroups: Array<{ label: string | null; registrations: ExportRegistration[] }>;
-  sequenceById: Map<string, number>;
+  showDailyTotal?: boolean;
+  dailyTotal?: number;
 }) {
   const rows: Array<Array<string | number>> = [
     ["參加者名單", "", "", "", ""],
     [`活動名稱：${options.eventTitle}`, "", "", "", ""],
     [`日期：${options.dateLabel}`, "", "", "", ""],
     [`時間：${options.overallTimeLabel}`, "", "", "", ""],
-    ["", "", "", "", ""],
   ];
   const merges: ReturnType<typeof XLSX.utils.decode_range>[] = [
     XLSX.utils.decode_range("A1:E1"),
@@ -158,6 +163,12 @@ function buildSheet(options: {
     XLSX.utils.decode_range("A3:E3"),
     XLSX.utils.decode_range("A4:E4"),
   ];
+
+  if (options.showDailyTotal) {
+    rows.push([`參加者人數總數：${options.dailyTotal ?? 0} 人`, "", "", "", ""]);
+    merges.push(XLSX.utils.decode_range("A5:E5"));
+  }
+  rows.push(["", "", "", "", ""]);
 
   for (const group of options.sessionGroups) {
     if (group.label) {
@@ -170,9 +181,9 @@ function buildSheet(options: {
     if (group.registrations.length === 0) {
       rows.push(["", "（暫未有參加者）", "", "", ""]);
     } else {
-      for (const registration of group.registrations) {
+      for (const [index, registration] of group.registrations.entries()) {
         rows.push([
-          options.sequenceById.get(registration.id) ?? "",
+          index + 1,
           registration.full_name,
           registration.phone,
           registration.notes ?? "",
@@ -218,7 +229,6 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     const confirmed = ((registrations ?? []) as ExportRegistration[]).sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
-    const sequenceById = new Map(confirmed.map((registration, index) => [registration.id, index + 1]));
     const workbook = XLSX.utils.book_new();
 
     if (!event.is_multi_session) {
@@ -228,7 +238,6 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
         dateLabel: formatDate(event.start_at),
         overallTimeLabel: formatTimeRange(event.start_at, event.end_at),
         sessionGroups: [{ label: null, registrations: confirmed }],
-        sequenceById,
       });
       XLSX.utils.book_append_sheet(workbook, ws, safeSheetName(dateKey, "參加者名單"));
     } else {
@@ -273,12 +282,18 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
         const overallTimeLabel = firstSession && lastSession
           ? `${formatTime(firstSession.start_at)}–${formatTime(lastSession.end_at)}（多時段，詳見下方）`
           : "多個時段（詳見下方）";
+        const groupsForSheet = sessionGroups.length ? sessionGroups : [{ label: null, registrations: unmatched }];
+        const dailyTotal = sortedDaySessions.reduce(
+          (total, session) => total + confirmed.filter((registration) => registration.session_id === session.id).length,
+          0,
+        );
         const ws = buildSheet({
           eventTitle: event.title,
           dateLabel: formatDate(dateValue),
           overallTimeLabel,
-          sessionGroups: sessionGroups.length ? sessionGroups : [{ label: null, registrations: unmatched }],
-          sequenceById,
+          sessionGroups: groupsForSheet,
+          showDailyTotal: true,
+          dailyTotal,
         });
         XLSX.utils.book_append_sheet(workbook, ws, safeSheetName(sessionDate, `日期${sheetIndex}`));
       }
