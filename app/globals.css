@@ -1049,3 +1049,62 @@ html[data-mobile-layout="true"] .mobile-home-top-tabs { display: grid; }
 .saved-interval-block:hover { border-color: var(--blue); background: #f3f8ff; }
 .saved-interval-block span { font-weight: 850; font-size: 12px; }
 .saved-interval-block small, .saved-interval-blocks > small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+
+/* External registration */
+.external-registration-settings .external-registration-toggle {
+  border: 1px solid var(--border, #d9e2ec);
+  border-radius: 14px;
+  padding: 16px;
+  background: rgba(248,250,252,.78);
+}
+.external-registration-fields { margin-top: 16px; }
+.external-registration-option { gap: 18px; }
+.external-registration-provider {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 16px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+.external-registration-provider > svg { flex: 0 0 auto; margin-top: 2px; }
+.external-registration-provider strong { display: block; margin-bottom: 4px; }
+.external-registration-provider p { margin: 0; color: #64748b; }
+.external-registration-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .58);
+}
+.external-registration-modal {
+  width: min(520px, 100%);
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 24px 70px rgba(15,23,42,.28);
+  padding: 22px;
+}
+.external-registration-modal header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.external-registration-modal header > div { display: flex; gap: 12px; align-items: flex-start; }
+.external-registration-modal header span { display: grid; gap: 3px; }
+.external-registration-modal header strong { font-size: 1.15rem; }
+.external-registration-modal header small { color: #64748b; }
+.external-registration-modal > p { line-height: 1.7; margin: 0 0 22px; }
+.external-registration-modal-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.external-register-direct-guard { display: grid; gap: 18px; }
+.capacity-panel.external-only { grid-template-columns: 1fr; }
+.homepage-event-status.tone-external { background: #eef2ff; color: #3730a3; }
+@media (max-width: 640px) {
+  .external-registration-modal { padding: 18px; border-radius: 16px; }
+  .external-registration-modal-actions { display: grid; grid-template-columns: 1fr; }
+  .external-registration-modal-actions .button { width: 100%; justify-content: center; }
+}

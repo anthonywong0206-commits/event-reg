@@ -83,7 +83,9 @@ export default async function HomePage() {
                   {spotlightEvent
                     ? (eventRegistrationState(spotlightEvent) === "upcoming"
                       ? "即將開始報名"
-                      : eventRegistrationState(spotlightEvent) === "waitlist"
+                      : spotlightEvent.external_registration
+                        ? "外部連結報名"
+                        : eventRegistrationState(spotlightEvent) === "waitlist"
                         ? "現只接受候補"
                         : new Date(spotlightEvent.end_at).getTime() < now
                           ? "活動回顧"

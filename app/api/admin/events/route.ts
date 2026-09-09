@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const sessions = normalizeSessionDateTimeList(rawSessions);
     const invalidSession = sessions.find((session) => new Date(session.end_at).getTime() <= new Date(session.start_at).getTime());
     if (invalidSession) return NextResponse.json({ error: `${invalidSession.session_date} 有時段的結束時間必須遲於開始時間` }, { status: 400 });
-    if (eventPayload.registration_visibility === "private" && !invite_code) {
+    if (!eventPayload.external_registration && eventPayload.registration_visibility === "private" && !invite_code) {
       return NextResponse.json({ error: "非公開報名活動必須設定邀請碼" }, { status: 400 });
     }
     const firstStart = sessions.length ? sessions.map((item) => item.start_at).sort()[0] : eventPayload.start_at;

@@ -27,7 +27,7 @@ const optionalUrlSchema = z.preprocess(
     const trimmed = value.trim();
     return trimmed.length ? trimmed : null;
   },
-  z.url("請輸入有效的外部連結網址（需以 http:// 或 https:// 開始）").max(1000).nullable(),
+  z.url("請輸入有效的外部連結網址（需以 http:// 或 https:// 開始）").max(1000).refine((value) => /^https?:\/\//i.test(value), "外部連結網址必須以 http:// 或 https:// 開始").nullable(),
 );
 
 export const registrationSchema = z.object({
@@ -83,6 +83,9 @@ export const eventSchema = z
     accepts_waitlist: z.boolean().default(false),
     registration_visibility: z.enum(["public", "private"]).default("public"),
     invite_code: z.string().trim().min(4, "邀請碼最少需要 4 個字元").max(40, "邀請碼不可超過 40 個字元").nullable().optional(),
+    external_registration: z.boolean().default(false),
+    external_registration_url: optionalUrlSchema,
+    external_registration_organization: optionalTrimmedString(160),
     is_multi_session: z.boolean().default(false),
     sessions: z.array(eventSessionSchema).optional().default([]),
   })
@@ -105,6 +108,11 @@ export const eventSchema = z
   .refine((data) => !data.is_multi_session || data.sessions.every((session) => new Date(data.registration_deadline) <= new Date(session.start_at)), {
     message: "截止報名時間必須早於所有活動時段",
     path: ["registration_deadline"],
+  })
+  .superRefine((data, context) => {
+    if (!data.external_registration) return;
+    if (!data.external_registration_url) context.addIssue({ code: "custom", path: ["external_registration_url"], message: "外部連結報名活動必須輸入報名網址" });
+    if (!data.external_registration_organization) context.addIssue({ code: "custom", path: ["external_registration_organization"], message: "外部連結報名活動必須輸入負責機構" });
   });
 
 export const checkInSchema = z.object({

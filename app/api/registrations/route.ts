@@ -53,6 +53,10 @@ export async function POST(request: Request) {
     }
     const event = eventData as EventRecord & { invite_code_hash?: string | null };
 
+    if (event.external_registration) {
+      return NextResponse.json({ error: "此活動使用外部連結報名，請返回活動頁使用指定外部連結。" }, { status: 409 });
+    }
+
     if (event.registration_visibility === "private") {
       const inviteAccessToken = request.headers.get("x-event-invite-access");
       const accessGranted = verifyInvitePageAccessToken(

@@ -46,6 +46,9 @@ export interface EventRecord {
   accepts_waitlist?: boolean;
   registration_visibility?: RegistrationVisibility;
   invite_code_configured?: boolean;
+  external_registration?: boolean;
+  external_registration_url?: string | null;
+  external_registration_organization?: string | null;
   is_multi_session: boolean;
   sessions?: EventSessionRecord[];
   created_at?: string;

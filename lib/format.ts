@@ -58,6 +58,7 @@ export function eventRegistrationState(event: EventRecord): EventRegistrationSta
   if (event.status !== "published") return "closed";
   if (isRegistrationNotStarted(event)) return "upcoming";
   if (isRegistrationClosed(event)) return "closed";
+  if (event.external_registration) return "open";
   if (event.confirmed_count >= event.capacity) return event.accepts_waitlist ? "waitlist" : "full";
   return "open";
 }

@@ -36,23 +36,23 @@ export default async function EventDetailPage({ params }: { params: Promise<{ sl
             <dl className="detail-facts">
               <div><dt><CalendarDays />日期時間</dt><dd>{event.is_multi_session ? `${event.sessions?.length || 0} 個可選時段` : formatEventDate(event)}</dd></div>
               <div><dt><MapPin />地點</dt><dd>{event.location}{event.address && <small>{event.address}</small>}</dd></div>
-              <div><dt><UsersRound />活動名額</dt><dd>{event.is_multi_session ? <span className={`capacity-signal ${capacitySignal(event).key}`}>{capacitySignal(event).label}</span> : registrationState === "waitlist" ? <span className="capacity-signal waitlist">正選已滿，現只接受候補</span> : <>上限 {event.capacity} 人，已報名 {event.confirmed_count} 人，尚餘 {remainingSeats(event)} 位</>}</dd></div>
+              {!event.external_registration && <div><dt><UsersRound />活動名額</dt><dd>{event.is_multi_session ? <span className={`capacity-signal ${capacitySignal(event).key}`}>{capacitySignal(event).label}</span> : registrationState === "waitlist" ? <span className="capacity-signal waitlist">正選已滿，現只接受候補</span> : <>上限 {event.capacity} 人，已報名 {event.confirmed_count} 人，尚餘 {remainingSeats(event)} 位</>}</dd></div>}
               <div><dt><Clock3 />開始報名</dt><dd>{formatDeadline(event.registration_start_at)}</dd></div>
               <div><dt><Clock3 />截止報名</dt><dd>{formatDeadline(event.registration_deadline)}</dd></div>
               {event.contact_phone && <div><dt><Phone />查詢</dt><dd>{event.contact_name || "活動服務處"}｜{event.contact_phone}</dd></div>}
             </dl>
-            <div className="capacity-panel">
-              <div><span>報名進度</span><strong>{event.confirmed_count} / {event.capacity}</strong><div className="progress-track"><i style={{ width: `${Math.min(100, (event.confirmed_count / event.capacity) * 100)}%` }} /></div></div>
+            <div className={`capacity-panel${event.external_registration ? " external-only" : ""}`}>
+              {!event.external_registration && <div><span>報名進度</span><strong>{event.confirmed_count} / {event.capacity}</strong><div className="progress-track"><i style={{ width: `${Math.min(100, (event.confirmed_count / event.capacity) * 100)}%` }} /></div></div>}
               <div><span>{registrationState === "upcoming" ? "距離開始報名" : "距離截止報名"}</span><strong className="countdown-text"><Countdown deadline={registrationState === "upcoming" ? event.registration_start_at : event.registration_deadline} mode={registrationState === "upcoming" ? "opening" : "deadline"} refreshOnComplete={registrationState === "upcoming"} /></strong></div>
             </div>
-            {event.is_multi_session && <div className="detail-session-preview"><h3>可選日期及時段</h3>{(event.sessions || []).filter((item)=>item.is_active).sort((a,b)=>a.start_at.localeCompare(b.start_at)).map((session)=><div key={session.id}><span>{formatDateTime(session.start_at)}</span><strong>{session.confirmed_count>=session.capacity ? (event.accepts_waitlist?"只接受候補":"名額已滿") : `尚餘 ${Math.max(0,session.capacity-session.confirmed_count)} 位`}</strong></div>)}</div>}
+            {event.is_multi_session && <div className="detail-session-preview"><h3>可選日期及時段</h3>{(event.sessions || []).filter((item)=>item.is_active).sort((a,b)=>a.start_at.localeCompare(b.start_at)).map((session)=><div key={session.id}><span>{formatDateTime(session.start_at)}</span>{!event.external_registration && <strong>{session.confirmed_count>=session.capacity ? (event.accepts_waitlist?"只接受候補":"名額已滿") : `尚餘 ${Math.max(0,session.capacity-session.confirmed_count)} 位`}</strong>}</div>)}</div>}
             <EventDetailActions event={event} />
           </div>
         </section>
         <section className="shell event-description-section">
           <div className="article-label">活動詳情</div>
           <article><h2>關於本活動</h2>{event.description.split("\n").map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</article>
-          <aside><h3>參加提示</h3><ul><li>請使用有效電郵地址收取 QR Code。</li><li>如未能出席，請盡早聯絡主辦單位。</li><li>活動安排如有更改，將以電郵通知。</li></ul></aside>
+          <aside><h3>參加提示</h3>{event.external_registration ? <ul><li>本活動由外部機構負責收集及處理報名資料。</li><li>離開本網站後，請留意外部報名頁面的私隱及報名安排。</li><li>如有查詢，請聯絡活動負責機構。</li></ul> : <ul><li>請使用有效電郵地址收取 QR Code。</li><li>如未能出席，請盡早聯絡主辦單位。</li><li>活動安排如有更改，將以電郵通知。</li></ul>}</aside>
         </section>
       </main>
       <SiteFooter />
