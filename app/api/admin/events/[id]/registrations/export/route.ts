@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { assertAdminForApi } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isServiceRoleConfigured } from "@/lib/env";
+import type { CustomRegistrationField } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,7 @@ type ExportRegistration = {
   notes: string | null;
   status: string;
   created_at: string;
+  custom_answers?: Record<string, string | string[]> | null;
 };
 
 const hkDateFormatter = new Intl.DateTimeFormat("zh-HK", {
@@ -69,18 +71,25 @@ function setCellStyle(ws: XLSX.WorkSheet, address: string, style: Record<string,
   if (cell) (cell as typeof cell & { s?: Record<string, unknown> }).s = style;
 }
 
-function applyListLayout(ws: XLSX.WorkSheet, lastRow: number) {
-  ws["!cols"] = [
-    { wch: 11 },
-    { wch: 22 },
-    { wch: 17 },
-    { wch: 38 },
-    { wch: 20 },
-  ];
-  ws["!rows"] = Array.from({ length: lastRow }, (_, index) => ({ hpt: index === 0 ? 28 : index < 4 ? 22 : 24 }));
+function applyListLayout(ws: XLSX.WorkSheet, lastRow: number, columnCount: number) {
+  const lastColumn = XLSX.utils.encode_col(Math.max(0, columnCount - 1));
+  ws["!cols"] = Array.from({ length: columnCount }, (_, index) => {
+    if (index === 0) return { wch: 11 };
+    if (index === 1) return { wch: 22 };
+    if (index === 2) return { wch: 17 };
+    if (index === 3) return { wch: 32 };
+    if (index === columnCount - 1) return { wch: 18 };
+    return { wch: 22 };
+  });
+  ws["!rows"] = Array.from({ length: lastRow }, (_, index) => ({ hpt: index === 0 ? 28 : index < 5 ? 22 : 24 }));
   ws["!margins"] = { left: 0.35, right: 0.35, top: 0.45, bottom: 0.45, header: 0.2, footer: 0.2 };
-  (ws as XLSX.WorkSheet & { "!pageSetup"?: unknown })["!pageSetup"] = { orientation: "portrait", fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
-  (ws as XLSX.WorkSheet & { "!printArea"?: string })["!printArea"] = `A1:E${lastRow}`;
+  (ws as XLSX.WorkSheet & { "!pageSetup"?: unknown })["!pageSetup"] = {
+    orientation: columnCount > 7 ? "landscape" : "portrait",
+    fitToWidth: 1,
+    fitToHeight: 0,
+    paperSize: 9,
+  };
+  (ws as XLSX.WorkSheet & { "!printArea"?: string })["!printArea"] = `A1:${lastColumn}${lastRow}`;
 
   const titleStyle: Record<string, unknown> = {
     font: { bold: true, sz: 18, color: { rgb: "17365D" } },
@@ -132,15 +141,23 @@ function applyListLayout(ws: XLSX.WorkSheet, lastRow: number) {
       continue;
     }
     if (ws[`A${row}`]?.v === "報名編號") {
-      for (const col of ["A", "B", "C", "D", "E"]) setCellStyle(ws, `${col}${row}`, headerStyle);
+      for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
+        setCellStyle(ws, `${XLSX.utils.encode_col(colIndex)}${row}`, headerStyle);
+      }
       continue;
     }
     if (typeof marker === "number") {
-      for (const col of ["A", "B", "C", "D", "E"]) setCellStyle(ws, `${col}${row}`, bodyStyle);
+      for (let colIndex = 0; colIndex < columnCount; colIndex += 1) {
+        setCellStyle(ws, `${XLSX.utils.encode_col(colIndex)}${row}`, bodyStyle);
+      }
       setCellStyle(ws, `A${row}`, { ...bodyStyle, alignment: { horizontal: "center", vertical: "center" } });
-      setCellStyle(ws, `E${row}`, { ...bodyStyle, alignment: { horizontal: "center", vertical: "center" } });
+      setCellStyle(ws, `${lastColumn}${row}`, { ...bodyStyle, alignment: { horizontal: "center", vertical: "center" } });
     }
   }
+}
+function displayCustomAnswer(value: string | string[] | null | undefined) {
+  if (Array.isArray(value)) return value.filter(Boolean).join("、");
+  return typeof value === "string" ? value : "";
 }
 
 function buildSheet(options: {
@@ -148,38 +165,43 @@ function buildSheet(options: {
   dateLabel: string;
   overallTimeLabel: string;
   sessionGroups: Array<{ label: string | null; registrations: ExportRegistration[] }>;
+  customFields: CustomRegistrationField[];
   showDailyTotal?: boolean;
   dailyTotal?: number;
 }) {
+  const headers = ["報名編號", "參加者姓名", "電話", "備註", ...options.customFields.map((field) => field.label), "簽到"];
+  const columnCount = headers.length;
+  const blankRow = () => Array.from({ length: columnCount }, () => "");
+  const lastColumn = XLSX.utils.encode_col(columnCount - 1);
   const rows: Array<Array<string | number>> = [
-    ["參加者名單", "", "", "", ""],
-    [`活動名稱：${options.eventTitle}`, "", "", "", ""],
-    [`日期：${options.dateLabel}`, "", "", "", ""],
-    [`時間：${options.overallTimeLabel}`, "", "", "", ""],
+    ["參加者名單", ...blankRow().slice(1)],
+    [`活動名稱：${options.eventTitle}`, ...blankRow().slice(1)],
+    [`日期：${options.dateLabel}`, ...blankRow().slice(1)],
+    [`時間：${options.overallTimeLabel}`, ...blankRow().slice(1)],
   ];
   const merges: ReturnType<typeof XLSX.utils.decode_range>[] = [
-    XLSX.utils.decode_range("A1:E1"),
-    XLSX.utils.decode_range("A2:E2"),
-    XLSX.utils.decode_range("A3:E3"),
-    XLSX.utils.decode_range("A4:E4"),
+    XLSX.utils.decode_range(`A1:${lastColumn}1`),
+    XLSX.utils.decode_range(`A2:${lastColumn}2`),
+    XLSX.utils.decode_range(`A3:${lastColumn}3`),
+    XLSX.utils.decode_range(`A4:${lastColumn}4`),
   ];
 
   if (options.showDailyTotal) {
-    rows.push([`參加者人數總數：${options.dailyTotal ?? 0} 人`, "", "", "", ""]);
-    merges.push(XLSX.utils.decode_range("A5:E5"));
+    rows.push([`參加者人數總數：${options.dailyTotal ?? 0} 人`, ...blankRow().slice(1)]);
+    merges.push(XLSX.utils.decode_range(`A5:${lastColumn}5`));
   }
-  rows.push(["", "", "", "", ""]);
+  rows.push(blankRow());
 
   for (const group of options.sessionGroups) {
     if (group.label) {
       const rowNo = rows.length + 1;
-      rows.push([`時段：${group.label}`, "", "", "", ""]);
-      merges.push(XLSX.utils.decode_range(`A${rowNo}:E${rowNo}`));
+      rows.push([`時段：${group.label}`, ...blankRow().slice(1)]);
+      merges.push(XLSX.utils.decode_range(`A${rowNo}:${lastColumn}${rowNo}`));
     }
 
-    rows.push(["報名編號", "參加者姓名", "電話", "備註", "簽到"]);
+    rows.push(headers);
     if (group.registrations.length === 0) {
-      rows.push(["", "（暫未有參加者）", "", "", ""]);
+      rows.push(["", "（暫未有參加者）", ...Array.from({ length: columnCount - 2 }, () => "")]);
     } else {
       for (const [index, registration] of group.registrations.entries()) {
         rows.push([
@@ -187,19 +209,19 @@ function buildSheet(options: {
           registration.full_name,
           registration.phone,
           registration.notes ?? "",
+          ...options.customFields.map((field) => displayCustomAnswer(registration.custom_answers?.[field.id])),
           "",
         ]);
       }
     }
-    rows.push(["", "", "", "", ""]);
+    rows.push(blankRow());
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws["!merges"] = merges;
-  applyListLayout(ws, rows.length);
+  applyListLayout(ws, rows.length, columnCount);
   return ws;
 }
-
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await assertAdminForApi();
@@ -212,12 +234,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     const [{ data: event, error: eventError }, { data: registrations, error: registrationError }] = await Promise.all([
       admin
         .from("events")
-        .select("title, slug, start_at, end_at, is_multi_session, sessions:event_sessions(id,session_date,start_at,end_at,sort_order,is_active)")
+        .select("title, slug, start_at, end_at, is_multi_session, custom_registration_fields, sessions:event_sessions(id,session_date,start_at,end_at,sort_order,is_active)")
         .eq("id", id)
         .maybeSingle(),
       admin
         .from("registrations")
-        .select("id, session_id, full_name, phone, notes, status, created_at")
+        .select("id, session_id, full_name, phone, notes, status, created_at, custom_answers")
         .eq("event_id", id)
         .eq("status", "confirmed")
         .order("created_at", { ascending: true }),
@@ -229,6 +251,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     const confirmed = ((registrations ?? []) as ExportRegistration[]).sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
+    const customFields = Array.isArray(event.custom_registration_fields)
+      ? (event.custom_registration_fields as CustomRegistrationField[]).filter(
+          (field) => field && typeof field.id === "string" && typeof field.label === "string" && field.label.trim(),
+        )
+      : [];
     const workbook = XLSX.utils.book_new();
 
     if (!event.is_multi_session) {
@@ -238,6 +265,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
         dateLabel: formatDate(event.start_at),
         overallTimeLabel: formatTimeRange(event.start_at, event.end_at),
         sessionGroups: [{ label: null, registrations: confirmed }],
+        customFields,
       });
       XLSX.utils.book_append_sheet(workbook, ws, safeSheetName(dateKey, "參加者名單"));
     } else {
@@ -292,6 +320,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
           dateLabel: formatDate(dateValue),
           overallTimeLabel,
           sessionGroups: groupsForSheet,
+          customFields,
           showDailyTotal: true,
           dailyTotal,
         });
