@@ -2,6 +2,15 @@ export type RegistrationMethod = "online" | "in_person";
 export type EventStatus = "draft" | "published" | "cancelled";
 export type RegistrationStatus = "confirmed" | "cancelled" | "waitlist";
 export type RegistrationVisibility = "public" | "private";
+export type CustomRegistrationFieldType = "short_text" | "long_text" | "single_choice" | "multiple_choice" | "select";
+
+export interface CustomRegistrationField {
+  id: string;
+  label: string;
+  type: CustomRegistrationFieldType;
+  required: boolean;
+  options?: string[];
+}
 export type HeroButtonPosition = "left" | "center" | "right";
 export type HeroButtonLinkType = "event" | "external";
 
@@ -49,6 +58,9 @@ export interface EventRecord {
   external_registration?: boolean;
   external_registration_url?: string | null;
   external_registration_organization?: string | null;
+  email_required?: boolean;
+  notes_required?: boolean;
+  custom_registration_fields?: CustomRegistrationField[];
   is_multi_session: boolean;
   sessions?: EventSessionRecord[];
   created_at?: string;
@@ -69,6 +81,7 @@ export interface RegistrationRecord {
   qr_token: string;
   attended_at: string | null;
   notes: string | null;
+  custom_answers?: Record<string, string | string[]>;
   email_sent?: boolean;
   email_error?: string | null;
   created_at: string;
@@ -133,6 +146,7 @@ export interface TelegramNotificationQueueRecord {
   telegram_message_id?: number | null;
   created_at: string;
 }
+
 
 export type EmailTemplateKey = "standard" | "friendly" | "concise" | "custom";
 

@@ -38,6 +38,7 @@ export const registrationSchema = z.object({
   phone: z.string().trim().min(8, "請輸入聯絡電話").max(30),
   method: z.enum(["online", "in_person"]),
   notes: z.string().trim().max(500).optional().default(""),
+  customAnswers: z.record(z.string(), z.union([z.string().max(2000), z.array(z.string().max(500)).max(50)])).optional().default({}),
   consent: z.literal(true, { error: "請同意個人資料收集聲明" }),
   website: z.string().max(0).optional().default(""),
 });
@@ -51,6 +52,18 @@ const eventSessionSchema = z.object({
   sort_order: z.coerce.number().int().min(0).default(0),
   is_active: z.boolean().default(true),
 }).refine((data) => new Date(data.end_at) > new Date(data.start_at), { message: "時段結束時間必須遲於開始時間", path: ["end_at"] });
+
+const customRegistrationFieldSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  label: z.string().trim().min(1, "自訂欄目必須輸入標題").max(120),
+  type: z.enum(["short_text", "long_text", "single_choice", "multiple_choice", "select"]),
+  required: z.boolean().default(false),
+  options: z.array(z.string().trim().min(1).max(120)).max(30).optional().default([]),
+}).superRefine((field, context) => {
+  if (["single_choice", "multiple_choice", "select"].includes(field.type) && field.options.length < 2) {
+    context.addIssue({ code: "custom", path: ["options"], message: `「${field.label}」最少需要兩個選項` });
+  }
+});
 
 export const eventSchema = z
   .object({
@@ -86,6 +99,9 @@ export const eventSchema = z
     external_registration: z.boolean().default(false),
     external_registration_url: optionalUrlSchema,
     external_registration_organization: optionalTrimmedString(160),
+    email_required: z.boolean().default(false),
+    notes_required: z.boolean().default(false),
+    custom_registration_fields: z.array(customRegistrationFieldSchema).max(30, "每個活動最多可建立 30 個自訂欄目").default([]),
     is_multi_session: z.boolean().default(false),
     sessions: z.array(eventSessionSchema).optional().default([]),
   })

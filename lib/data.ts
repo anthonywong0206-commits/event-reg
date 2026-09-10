@@ -5,10 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { EventRecord, RegistrationRecord } from "@/lib/types";
 
-const PUBLIC_EVENT_SELECT = "id,slug,title,subtitle,summary,description,category,location,address,start_at,end_at,registration_start_at,registration_deadline,capacity,confirmed_count,status,registration_methods,hero_image_url,poster_image_url,contact_name,contact_phone,contact_address,is_featured,accepts_waitlist,registration_visibility,external_registration,external_registration_url,external_registration_organization,is_multi_session,created_at,updated_at,sessions:event_sessions(*)";
+const PUBLIC_EVENT_SELECT = "id,slug,title,subtitle,summary,description,category,location,address,start_at,end_at,registration_start_at,registration_deadline,capacity,confirmed_count,status,registration_methods,hero_image_url,poster_image_url,contact_name,contact_phone,contact_address,is_featured,accepts_waitlist,registration_visibility,external_registration,external_registration_url,external_registration_organization,email_required,notes_required,custom_registration_fields,is_multi_session,created_at,updated_at,sessions:event_sessions(*)";
 
 function normalizePublicEvent(event: EventRecord): EventRecord {
-  return { ...event, registration_visibility: event.registration_visibility || "public", external_registration: Boolean(event.external_registration) };
+  return { ...event, registration_visibility: event.registration_visibility || "public", external_registration: Boolean(event.external_registration), email_required: Boolean(event.email_required), notes_required: Boolean(event.notes_required), custom_registration_fields: event.custom_registration_fields || [] };
 }
 
 function normalizeAdminEvent(row: Record<string, unknown>): EventRecord {
@@ -17,6 +17,9 @@ function normalizeAdminEvent(row: Record<string, unknown>): EventRecord {
     ...(safe as unknown as EventRecord),
     registration_visibility: (safe.registration_visibility as EventRecord["registration_visibility"]) || "public",
     external_registration: Boolean(safe.external_registration),
+    email_required: Boolean(safe.email_required),
+    notes_required: Boolean(safe.notes_required),
+    custom_registration_fields: (safe.custom_registration_fields as EventRecord["custom_registration_fields"]) || [],
     invite_code_configured: Boolean(invite_code_hash),
   };
 }
