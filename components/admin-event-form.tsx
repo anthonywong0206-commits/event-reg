@@ -3,12 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CalendarDays, CalendarPlus, Clock3, ImageUp, KeyRound, LoaderCircle, Plus, RefreshCw, Save, Trash2, Zap } from "lucide-react";
-import type { EventRecord, EventSessionRecord, RegistrationMethod } from "@/lib/types";
-import { readApiResponse } from "@/lib/api-response";
-import { createClient } from "@/lib/supabase/client";
-
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+import type { CustomRegistrationField, CustomRegistrationFieldType, EventRecord, EventSessionRecord, RegistrationMethod } from "@/lib/types";
 
 function localInput(value?: string | null) {
   if (!value) return "";
@@ -90,6 +85,9 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   const [registrationVisibility, setRegistrationVisibility] = useState<"public" | "private">(event?.registration_visibility === "private" ? "private" : "public");
   const [externalRegistration, setExternalRegistration] = useState(Boolean(event?.external_registration));
   const [inviteCode, setInviteCode] = useState("");
+  const [emailRequired, setEmailRequired] = useState(Boolean(event?.email_required));
+  const [notesRequired, setNotesRequired] = useState(Boolean(event?.notes_required));
+  const [customFields, setCustomFields] = useState<CustomRegistrationField[]>(event?.custom_registration_fields || []);
   const [intervalGenerators, setIntervalGenerators] = useState<Record<string, IntervalGeneratorDraft>>({});
 
   function generateInviteCode() {
@@ -281,6 +279,22 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
     }));
   }
 
+  function addCustomField() {
+    setCustomFields((current) => [...current, { id: crypto.randomUUID(), label: "", type: "short_text", required: false, options: [] }]);
+  }
+
+  function updateCustomField(id: string, patch: Partial<CustomRegistrationField>) {
+    setCustomFields((current) => current.map((field) => field.id === id ? { ...field, ...patch } : field));
+  }
+
+  function removeCustomField(id: string) {
+    setCustomFields((current) => current.filter((field) => field.id !== id));
+  }
+
+  function customFieldNeedsOptions(type: CustomRegistrationFieldType) {
+    return ["single_choice", "multiple_choice", "select"].includes(type);
+  }
+
   function toggleMethod(method: RegistrationMethod) {
     setMethods((current) => current.includes(method) ? current.filter((item) => item !== method) : [...current, method]);
   }
@@ -288,36 +302,12 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   async function upload(file: File, target: "poster" | "hero") {
     setUploading(true);
     setError("");
-
-    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
-      setError("只支援 JPG、PNG 或 WebP 圖片");
-      setUploading(false);
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setError("圖片不可大於 8MB，請先壓縮圖片後再試。");
-      setUploading(false);
-      return;
-    }
-
+    const body = new FormData();
+    body.append("file", file);
     try {
-      // Only small metadata is sent through Vercel. The image itself uploads
-      // directly to Supabase Storage using a short-lived signed upload token.
-      const response = await fetch("/api/admin/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, type: file.type, size: file.size }),
-      });
-      const result = await readApiResponse<{ path: string; token: string; url: string }>(response);
+      const response = await fetch("/api/admin/upload", { method: "POST", body });
+      const result = await response.json();
       if (!response.ok) throw new Error(result.error || "圖片上載失敗");
-      if (!result.path || !result.token || !result.url) throw new Error("圖片上載服務回傳資料不完整");
-
-      const supabase = createClient();
-      const { error: uploadError } = await supabase.storage
-        .from("event-media")
-        .uploadToSignedUrl(result.path, result.token, file);
-      if (uploadError) throw uploadError;
-
       if (target === "poster") setPosterUrl(result.url);
       else setHeroUrl(result.url);
     } catch (caught) {
@@ -394,6 +384,9 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       external_registration: externalRegistration,
       external_registration_url: externalRegistration ? (value("external_registration_url") || null) : null,
       external_registration_organization: externalRegistration ? (value("external_registration_organization") || null) : null,
+      email_required: emailRequired,
+      notes_required: notesRequired,
+      custom_registration_fields: customFields.map((field) => ({ ...field, label: field.label.trim(), options: (field.options || []).map((option) => option.trim()).filter(Boolean) })),
       is_multi_session: isMulti,
       sessions: normalizedSessions,
     };
@@ -404,7 +397,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const result = await readApiResponse(response);
+      const result = await response.json();
       if (!response.ok) throw new Error(result.error || "未能儲存活動");
       router.push("/admin");
       router.refresh();
@@ -420,7 +413,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
     setError("");
     try {
       const response = await fetch(`/api/admin/events/${event.id}`, { method: "DELETE" });
-      const result = await readApiResponse(response);
+      const result = await response.json();
       if (!response.ok) throw new Error(result.error || "未能刪除活動");
       router.push("/admin");
       router.refresh();
@@ -574,6 +567,27 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
               </div>
             </article>;
           })}
+        </div>
+      </section>}
+
+      {!externalRegistration && <section className="admin-form-section custom-registration-fields-section">
+        <div className="section-heading"><div><h2>報名資料欄目</h2><span>姓名及電話固定為必填；電郵、備註可設定是否必填，亦可新增自訂欄目。</span></div><button type="button" className="button button-secondary button-small" onClick={addCustomField}><Plus />新增自訂欄目</button></div>
+        <div className="basic-registration-field-settings">
+          <div className="basic-registration-field-row"><strong>姓名</strong><span>固定必填</span></div>
+          <div className="basic-registration-field-row"><strong>電話</strong><span>固定必填</span></div>
+          <label className="basic-registration-field-row"><strong>電郵</strong><span><input type="checkbox" checked={emailRequired} onChange={(e)=>setEmailRequired(e.target.checked)} /> 必填</span></label>
+          <label className="basic-registration-field-row"><strong>備註</strong><span><input type="checkbox" checked={notesRequired} onChange={(e)=>setNotesRequired(e.target.checked)} /> 必填</span></label>
+        </div>
+        <div className="custom-field-builder-list">
+          {customFields.map((field, index) => <article className="custom-field-builder-row" key={field.id}>
+            <strong>自訂欄目 {index + 1}</strong>
+            <label className="field"><span>標題 *</span><input value={field.label} onChange={(e)=>updateCustomField(field.id,{label:e.target.value})} placeholder="例如：出生年份" required /></label>
+            <label className="field"><span>欄目種類</span><select value={field.type} onChange={(e)=>updateCustomField(field.id,{type:e.target.value as CustomRegistrationFieldType, options: customFieldNeedsOptions(e.target.value as CustomRegistrationFieldType) ? (field.options?.length ? field.options : ["選項 1","選項 2"]) : []})}><option value="short_text">短題目</option><option value="long_text">長題目</option><option value="single_choice">單選題</option><option value="multiple_choice">多選題</option><option value="select">下拉選單</option></select></label>
+            {customFieldNeedsOptions(field.type) && <label className="field field-full"><span>選項（每行一個） *</span><textarea rows={4} value={(field.options||[]).join("\n")} onChange={(e)=>updateCustomField(field.id,{options:e.target.value.split(/\r?\n/)})} placeholder={"男\n女"} required /></label>}
+            <label className="field checkbox-field"><input type="checkbox" checked={field.required} onChange={(e)=>updateCustomField(field.id,{required:e.target.checked})}/><span>必填</span></label>
+            <button type="button" className="icon-button danger" onClick={()=>removeCustomField(field.id)} aria-label={`刪除自訂欄目 ${index+1}`}><Trash2 /></button>
+          </article>)}
+          {customFields.length===0 && <p className="muted">未有自訂欄目。按「新增自訂欄目」可收集出生年份、性別、飲食需要等額外資料。</p>}
         </div>
       </section>}
 

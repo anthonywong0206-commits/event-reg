@@ -57,6 +57,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "此活動使用外部連結報名，請返回活動頁使用指定外部連結。" }, { status: 409 });
     }
 
+    if (event.email_required && !parsed.data.email) {
+      return NextResponse.json({ error: "請輸入電郵地址" }, { status: 400 });
+    }
+    if (event.notes_required && !parsed.data.notes.trim()) {
+      return NextResponse.json({ error: "請輸入備註" }, { status: 400 });
+    }
+    const customAnswers: Record<string, string | string[]> = {};
+    for (const field of event.custom_registration_fields || []) {
+      const raw = parsed.data.customAnswers[field.id];
+      const options = field.options || [];
+      if (field.type === "multiple_choice") {
+        const values = Array.isArray(raw) ? raw.map(String).filter((value) => options.includes(value)) : [];
+        if (field.required && values.length === 0) return NextResponse.json({ error: `請填寫「${field.label}」` }, { status: 400 });
+        customAnswers[field.id] = values;
+      } else {
+        const value = typeof raw === "string" ? raw.trim() : "";
+        if (field.required && !value) return NextResponse.json({ error: `請填寫「${field.label}」` }, { status: 400 });
+        if (["single_choice", "select"].includes(field.type) && value && !options.includes(value)) return NextResponse.json({ error: `「${field.label}」選項無效` }, { status: 400 });
+        customAnswers[field.id] = value;
+      }
+    }
+
     if (event.registration_visibility === "private") {
       const inviteAccessToken = request.headers.get("x-event-invite-access");
       const accessGranted = verifyInvitePageAccessToken(
@@ -77,6 +99,7 @@ export async function POST(request: Request) {
       p_phone: parsed.data.phone,
       p_method: parsed.data.method,
       p_notes: parsed.data.notes || null,
+      p_custom_answers: customAnswers,
     });
 
     if (error) {
