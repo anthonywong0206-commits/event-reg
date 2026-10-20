@@ -53,6 +53,7 @@ const eventSessionSchema = z.object({
   sort_order: z.coerce.number().int().min(0).default(0),
   is_active: z.boolean().default(true),
   sub_activity_name: z.string().trim().max(160).nullable().optional(),
+  sub_activity_key: z.string().trim().max(120).nullable().optional(),
 }).refine((data) => new Date(data.end_at) > new Date(data.start_at), { message: "時段結束時間必須遲於開始時間", path: ["end_at"] });
 
 const customRegistrationFieldSchema = z.object({
@@ -107,6 +108,7 @@ export const eventSchema = z
     is_multi_session: z.boolean().default(false),
     sub_activity_mode: z.boolean().default(false),
     max_sub_activity_selections: z.coerce.number().int().min(1).max(50).default(1),
+    sub_activity_definitions: z.array(z.object({ id: z.string().trim().min(1).max(120), name: z.string().trim().min(1).max(160) })).max(50).default([]),
     sessions: z.array(eventSessionSchema).optional().default([]),
   })
   .refine((data) => new Date(data.end_at) > new Date(data.start_at), {
@@ -121,12 +123,24 @@ export const eventSchema = z
     message: "子活動模式只適用於多時段活動",
     path: ["sub_activity_mode"],
   })
-  .refine((data) => !data.sub_activity_mode || data.sessions.every((session) => Boolean(session.sub_activity_name?.trim())), {
-    message: "子活動模式下每個時段都必須設定子活動名稱",
+  .refine((data) => !data.sub_activity_mode || data.sessions.every((session) => Boolean(session.sub_activity_name?.trim()) && Boolean(session.sub_activity_key?.trim())), {
+    message: "子活動模式下每個時段都必須連結至有效子活動",
     path: ["sessions"],
   })
-  .refine((data) => !data.is_multi_session || data.sessions.length > 0, {
-    message: "多時段活動最少需要一個日期及時段",
+  .refine((data) => !data.sub_activity_mode || data.sub_activity_definitions.length > 0, {
+    message: "子活動模式最少需要建立一個子活動",
+    path: ["sub_activity_definitions"],
+  })
+  .refine((data) => !data.sub_activity_mode || new Set(data.sub_activity_definitions.map((item) => item.id)).size === data.sub_activity_definitions.length, {
+    message: "子活動識別資料重複，請重新整理頁面後再試",
+    path: ["sub_activity_definitions"],
+  })
+  .refine((data) => !data.sub_activity_mode || data.sessions.every((session) => data.sub_activity_definitions.some((item) => item.id === session.sub_activity_key)), {
+    message: "部分時段未連結至現有子活動",
+    path: ["sessions"],
+  })
+  .refine((data) => !data.is_multi_session || data.sessions.length > 0 || (data.sub_activity_mode && data.status === "draft"), {
+    message: "公開／取消的多時段活動最少需要一個日期及時段；子活動可先以草稿保存，再新增時段",
     path: ["sessions"],
   })
   .refine((data) => data.is_multi_session || new Date(data.registration_deadline) <= new Date(data.start_at), {

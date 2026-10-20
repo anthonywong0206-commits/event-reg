@@ -14,6 +14,11 @@ export interface CustomRegistrationField {
 export type HeroButtonPosition = "left" | "center" | "right";
 export type HeroButtonLinkType = "event" | "external";
 
+export interface SubActivityDefinition {
+  id: string;
+  name: string;
+}
+
 export interface EventSessionRecord {
   id: string;
   event_id: string;
@@ -25,6 +30,7 @@ export interface EventSessionRecord {
   sort_order: number;
   is_active: boolean;
   sub_activity_name?: string | null;
+  sub_activity_key?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -65,6 +71,7 @@ export interface EventRecord {
   is_multi_session: boolean;
   sub_activity_mode?: boolean;
   max_sub_activity_selections?: number;
+  sub_activity_definitions?: SubActivityDefinition[];
   sessions?: EventSessionRecord[];
   created_at?: string;
   updated_at?: string;
