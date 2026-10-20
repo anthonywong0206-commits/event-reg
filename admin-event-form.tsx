@@ -1,0 +1,786 @@
+"use client";
+
+import { FormEvent, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AlertCircle, CalendarDays, CalendarPlus, Clock3, ImageUp, KeyRound, LoaderCircle, Plus, RefreshCw, Save, Trash2, Zap } from "lucide-react";
+import type { CustomRegistrationField, CustomRegistrationFieldType, EventRecord, EventSessionRecord, RegistrationMethod } from "@/lib/types";
+import { prepareImageForUpload, readJsonResponse } from "@/lib/client-image-upload";
+
+function localInput(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+const hongKongTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Hong_Kong",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+function hongKongTime(value?: string | null) {
+  if (!value) return "";
+  return hongKongTimeFormatter.format(new Date(value));
+}
+
+function hongKongSessionIso(sessionDate: string, time: string) {
+  return new Date(`${sessionDate}T${time}:00+08:00`).toISOString();
+}
+
+type SessionDraft = Pick<EventSessionRecord, "id" | "session_date" | "start_at" | "end_at" | "capacity" | "confirmed_count" | "sort_order" | "is_active" | "sub_activity_name" | "sub_activity_key">;
+
+type IntervalGeneratorDraft = {
+  startTime: string;
+  endTime: string;
+  intervalMinutes: number;
+  capacity: number;
+};
+
+type InferredIntervalBlock = IntervalGeneratorDraft & {
+  slotCount: number;
+};
+
+function minutesToTime(totalMinutes: number) {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function timeToMinutes(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function dateTimeForSession(sessionDate: string, time: string) {
+  return new Date(hongKongSessionIso(sessionDate, time));
+}
+
+function defaultSession(): SessionDraft {
+  const date = new Date();
+  date.setDate(date.getDate() + 14);
+  const sessionDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Hong_Kong", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  return { id: crypto.randomUUID(), session_date: sessionDate, start_at: hongKongSessionIso(sessionDate, "10:00"), end_at: hongKongSessionIso(sessionDate, "12:00"), capacity: 20, confirmed_count: 0, sort_order: 0, is_active: true, sub_activity_name: "", sub_activity_key: null };
+}
+
+function createStableClientId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `sub-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function AdminEventForm({ event, forceMulti = false }: { event?: EventRecord | null; forceMulti?: boolean }) {
+  const router = useRouter();
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [posterUrl, setPosterUrl] = useState(event?.poster_image_url || "/images/ocean-poster.jpg");
+  const [heroUrl, setHeroUrl] = useState(event?.hero_image_url || "/images/hero-community.jpg");
+  const [methods, setMethods] = useState<RegistrationMethod[]>(event?.registration_methods || ["online", "in_person"]);
+  const isMulti = forceMulti || Boolean(event?.is_multi_session);
+  const [sessions, setSessions] = useState<SessionDraft[]>(event?.sessions?.length ? event.sessions.map((item) => ({
+    ...item,
+    start_at: hongKongSessionIso(item.session_date, hongKongTime(item.start_at)),
+    end_at: hongKongSessionIso(item.session_date, hongKongTime(item.end_at)),
+  })) : isMulti ? [defaultSession()] : []);
+  const [registrationStartMode, setRegistrationStartMode] = useState<"immediate" | "scheduled">(
+    event && new Date(event.registration_start_at).getTime() > Date.now() ? "scheduled" : "immediate",
+  );
+  const [registrationVisibility, setRegistrationVisibility] = useState<"public" | "private">(event?.registration_visibility === "private" ? "private" : "public");
+  const [externalRegistration, setExternalRegistration] = useState(Boolean(event?.external_registration));
+  const [subActivityMode, setSubActivityMode] = useState(Boolean(event?.sub_activity_mode));
+  const activeModeSessions = useMemo(() => sessions.filter((item) => subActivityMode ? Boolean(String(item.sub_activity_key || "").trim()) : !String(item.sub_activity_key || "").trim()), [sessions, subActivityMode]);
+  const totalSessionCapacity = useMemo(() => activeModeSessions.reduce((sum, item) => sum + Number(item.capacity || 0), 0), [activeModeSessions]);
+  const [maxSubActivitySelections, setMaxSubActivitySelections] = useState(Number(event?.max_sub_activity_selections || 1));
+  const [inviteCode, setInviteCode] = useState("");
+  const [emailRequired, setEmailRequired] = useState(Boolean(event?.email_required));
+  const [notesRequired, setNotesRequired] = useState(Boolean(event?.notes_required));
+  const [customFields, setCustomFields] = useState<CustomRegistrationField[]>(event?.custom_registration_fields || []);
+  const [intervalGenerators, setIntervalGenerators] = useState<Record<string, IntervalGeneratorDraft>>({});
+  const [subActivities, setSubActivities] = useState<Array<{ id: string; name: string }>>(() => {
+    const saved = (event?.sub_activity_definitions || []).filter((item) => item?.id && item?.name);
+    if (saved.length) return saved.map((item) => ({ id: item.id, name: item.name }));
+    const legacy = new Map<string, string>();
+    for (const item of event?.sessions || []) {
+      const name = String(item.sub_activity_name || "").trim();
+      if (!name) continue;
+      const key = String(item.sub_activity_key || "").trim() || `legacy-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${createStableClientId().slice(-6)}`;
+      if (![...legacy.values()].includes(name)) legacy.set(key, name);
+    }
+    return legacy.size ? [...legacy.entries()].map(([id, name]) => ({ id, name })) : [{ id: createStableClientId(), name: "" }];
+  });
+
+  function generateInviteCode() {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const bytes = new Uint32Array(8);
+    crypto.getRandomValues(bytes);
+    setInviteCode(Array.from(bytes, (value) => alphabet[value % alphabet.length]).join(""));
+  }
+
+  const sessionDates = useMemo(() => [...new Set(sessions.filter((item) => !String(item.sub_activity_key || "").trim()).map((item) => item.session_date))].sort(), [sessions]);
+
+  function addDate() {
+    const next = defaultSession();
+    const lastDate = sessionDates.at(-1);
+    if (lastDate) {
+      const date = new Date(`${lastDate}T12:00:00`);
+      date.setDate(date.getDate() + 1);
+      const nextDate = date.toISOString().slice(0, 10);
+      next.session_date = nextDate;
+      next.start_at = hongKongSessionIso(nextDate, "10:00");
+      next.end_at = hongKongSessionIso(nextDate, "12:00");
+    }
+    setSessions((current) => [...current, { ...next, sort_order: current.length }]);
+  }
+
+  function addSessionForDate(sessionDate: string) {
+    const sameDate = sessions.filter((item) => !String(item.sub_activity_key || "").trim() && item.session_date === sessionDate).sort((a,b)=>a.start_at.localeCompare(b.start_at));
+    const previous = sameDate.at(-1);
+    const startTime = previous ? hongKongTime(previous.end_at) : "10:00";
+    const startMinutes = timeToMinutes(startTime);
+    const endTime = minutesToTime(Math.min(startMinutes + 120, 23 * 60 + 59));
+    const next = defaultSession();
+    next.session_date = sessionDate;
+    next.start_at = hongKongSessionIso(sessionDate, startTime);
+    next.end_at = hongKongSessionIso(sessionDate, endTime);
+    setSessions((current) => [...current, { ...next, sort_order: current.length }]);
+  }
+
+  function updateDate(oldDate: string, newDate: string) {
+    setSessions((current) => current.map((item) => {
+      if (String(item.sub_activity_key || "").trim() || item.session_date !== oldDate) return item;
+      return {
+        ...item,
+        session_date: newDate,
+        start_at: hongKongSessionIso(newDate, hongKongTime(item.start_at)),
+        end_at: hongKongSessionIso(newDate, hongKongTime(item.end_at)),
+      };
+    }));
+    setIntervalGenerators((current) => {
+      if (!current[oldDate]) return current;
+      const next = { ...current, [newDate]: current[oldDate] };
+      delete next[oldDate];
+      return next;
+    });
+  }
+
+  function removeDate(sessionDate: string) {
+    if (sessionDates.length === 1) return;
+    setSessions((current) => current.filter((item) => String(item.sub_activity_key || "").trim() || item.session_date !== sessionDate));
+  }
+
+  function updateSession(index: number, patch: Partial<SessionDraft>) {
+    setSessions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  }
+
+  function removeSession(index: number) {
+    setSessions((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function changeSubActivityMode(enabled: boolean) {
+    setSubActivityMode(enabled);
+    if (enabled) {
+      const saved = event?.sub_activity_definitions || [];
+      if (saved.length) {
+        setSubActivities(saved.map((item) => ({ id: item.id, name: item.name })));
+      } else {
+        const legacy = new Map<string, string>();
+        sessions.forEach((item) => {
+          const name = String(item.sub_activity_name || "").trim();
+          if (!name) return;
+          const key = String(item.sub_activity_key || "").trim() || createStableClientId();
+          if (![...legacy.values()].includes(name)) legacy.set(key, name);
+        });
+        if (legacy.size) setSubActivities([...legacy.entries()].map(([id, name]) => ({ id, name })));
+        else setSubActivities([{ id: createStableClientId(), name: "" }]);
+      }
+    } else if (!sessions.some((item) => !String(item.sub_activity_key || "").trim())) {
+      setSessions((current) => [...current, defaultSession()]);
+    }
+  }
+
+  function addSubActivity() {
+    setSubActivities((current) => {
+      const used = new Set(current.map((item) => item.id));
+      let id = createStableClientId();
+      while (used.has(id)) id = createStableClientId();
+      return [...current, { id, name: "" }];
+    });
+    setError("");
+  }
+
+  function renameSubActivity(id: string, nextName: string) {
+    setSubActivities((current) => current.map((item) => item.id === id ? { ...item, name: nextName } : item));
+    setSessions((current) => current.map((session) => String(session.sub_activity_key || "") === id ? { ...session, sub_activity_name: nextName } : session));
+  }
+
+  function assignSessionToSubActivity(sessionId: string, activityId: string) {
+    const activity = subActivities.find((item) => item.id === activityId);
+    if (!activity) return;
+    const name = activity.name.trim();
+    if (!name) { setError("請先輸入子活動名稱"); return; }
+    setSessions((current) => current.map((session) => session.id === sessionId ? {
+      ...session,
+      sub_activity_key: activity.id,
+      sub_activity_name: name,
+    } : session));
+    setError("");
+  }
+
+  function addSubActivitySession(activity: { id: string; name: string }) {
+    const latestActivity = subActivities.find((item) => item.id === activity.id) || activity;
+    const name = latestActivity.name.trim();
+    if (!name) { setError("請先輸入子活動名稱，再新增時段"); return; }
+
+    const existing = sessions
+      .filter((item) => String(item.sub_activity_key || "") === latestActivity.id)
+      .sort((a,b)=>a.start_at.localeCompare(b.start_at));
+    const otherSubActivitySessions = sessions
+      .filter((item) => Boolean(String(item.sub_activity_key || "").trim()))
+      .sort((a,b)=>a.start_at.localeCompare(b.start_at));
+    const next = defaultSession();
+
+    if (existing.length) {
+      const previous = existing.at(-1)!;
+      next.session_date = previous.session_date;
+      const startTime = hongKongTime(previous.end_at);
+      const startMinutes = timeToMinutes(startTime);
+      const endMinutes = Math.min(startMinutes + 60, 23 * 60 + 59);
+      const safeEndMinutes = endMinutes <= startMinutes ? Math.min(startMinutes + 30, 23 * 60 + 59) : endMinutes;
+      next.start_at = hongKongSessionIso(next.session_date, startTime);
+      next.end_at = hongKongSessionIso(next.session_date, minutesToTime(safeEndMinutes));
+    } else if (otherSubActivitySessions.length) {
+      // A newly-created second/third sub-activity should inherit a proven valid event date/time
+      // instead of defaulting to today+14, which may fall before the registration deadline.
+      const template = otherSubActivitySessions[0];
+      next.session_date = template.session_date;
+      next.start_at = hongKongSessionIso(template.session_date, hongKongTime(template.start_at));
+      next.end_at = hongKongSessionIso(template.session_date, hongKongTime(template.end_at));
+      next.capacity = Number(template.capacity || 20);
+    } else if (event?.start_at && event?.end_at) {
+      const startDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Hong_Kong", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(event.start_at));
+      next.session_date = startDate;
+      next.start_at = hongKongSessionIso(startDate, hongKongTime(event.start_at));
+      next.end_at = hongKongSessionIso(startDate, hongKongTime(event.end_at));
+    }
+
+    next.sub_activity_name = name;
+    next.sub_activity_key = latestActivity.id;
+    setSessions((current) => [...current, { ...next, id: createStableClientId(), sort_order: current.length }]);
+    setError("");
+  }
+
+  function removeSubActivity(id: string) {
+    const activity = subActivities.find((item) => item.id === id);
+    if (!activity) return;
+    const related = sessions.filter((item) => String(item.sub_activity_key || "") === activity.id);
+    if (related.some((item) => Number(item.confirmed_count || 0) > 0)) {
+      setError(`「${activity.name || "此子活動"}」已有參加者，不能直接刪除。`);
+      return;
+    }
+    setSessions((current) => current.filter((item) => String(item.sub_activity_key || "") !== activity.id));
+    setSubActivities((current) => current.filter((item) => item.id !== id));
+  }
+
+  function inferIntervalBlocks(dateSessions: SessionDraft[]): InferredIntervalBlock[] {
+    const ordered = [...dateSessions].sort((a, b) => a.start_at.localeCompare(b.start_at));
+    const blocks: InferredIntervalBlock[] = [];
+    for (const session of ordered) {
+      const startTime = hongKongTime(session.start_at);
+      const endTime = hongKongTime(session.end_at);
+      const intervalMinutes = timeToMinutes(endTime) - timeToMinutes(startTime);
+      if (intervalMinutes <= 0) continue;
+      const previous = blocks.at(-1);
+      if (previous && previous.endTime === startTime && previous.intervalMinutes === intervalMinutes && previous.capacity === Number(session.capacity)) {
+        previous.endTime = endTime;
+        previous.slotCount += 1;
+      } else {
+        blocks.push({ startTime, endTime, intervalMinutes, capacity: Number(session.capacity), slotCount: 1 });
+      }
+    }
+    return blocks;
+  }
+
+  function getIntervalGenerator(sessionDate: string, dateSessions: SessionDraft[]): IntervalGeneratorDraft {
+    const existing = intervalGenerators[sessionDate];
+    if (existing) return existing;
+    if (event) {
+      const inferred = inferIntervalBlocks(dateSessions)[0];
+      if (inferred) {
+        return { startTime: inferred.startTime, endTime: inferred.endTime, intervalMinutes: inferred.intervalMinutes, capacity: inferred.capacity };
+      }
+    }
+    const latest = [...dateSessions].sort((a, b) => a.end_at.localeCompare(b.end_at)).at(-1);
+    const startTime = latest ? hongKongTime(latest.end_at) : "10:00";
+    const startMinutes = timeToMinutes(startTime);
+    return {
+      startTime,
+      endTime: minutesToTime(Math.min(startMinutes + 120, 23 * 60 + 59)),
+      intervalMinutes: 15,
+      capacity: 20,
+    };
+  }
+
+  function updateIntervalGenerator(sessionDate: string, dateSessions: SessionDraft[], patch: Partial<IntervalGeneratorDraft>) {
+    setIntervalGenerators((current) => ({
+      ...current,
+      [sessionDate]: { ...getIntervalGenerator(sessionDate, dateSessions), ...patch },
+    }));
+  }
+
+  function generateIntervalSessions(sessionDate: string, dateSessions: SessionDraft[]) {
+    setError("");
+    const generator = getIntervalGenerator(sessionDate, dateSessions);
+    const interval = Number(generator.intervalMinutes);
+    const capacity = Number(generator.capacity);
+    const startMinutes = timeToMinutes(generator.startTime);
+    const endMinutes = timeToMinutes(generator.endTime);
+
+    if (!Number.isInteger(interval) || interval < 1 || interval > 720) {
+      setError("節數間隔必須為 1 至 720 分鐘的整數");
+      return;
+    }
+    if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100000) {
+      setError("每節名額必須為 1 至 100000 人");
+      return;
+    }
+    if (endMinutes <= startMinutes) {
+      setError("批量產生時段的結束時間必須遲於開始時間");
+      return;
+    }
+    const duration = endMinutes - startMinutes;
+    if (duration % interval !== 0) {
+      setError(`時間區段共 ${duration} 分鐘，未能完整分成每 ${interval} 分鐘一節。請調整結束時間或節數間隔。`);
+      return;
+    }
+
+    const blockStart = dateTimeForSession(sessionDate, generator.startTime).getTime();
+    const blockEnd = dateTimeForSession(sessionDate, generator.endTime).getTime();
+    const overlapping = dateSessions.filter((session) => {
+      const sessionStart = new Date(session.start_at).getTime();
+      const sessionEnd = new Date(session.end_at).getTime();
+      return sessionStart < blockEnd && sessionEnd > blockStart;
+    });
+    const bookedOverlap = overlapping.find((session) => Number(session.confirmed_count || 0) > 0);
+    if (bookedOverlap) {
+      setError(`所選時間區段與已有參加者的時段 ${hongKongTime(bookedOverlap.start_at)}–${hongKongTime(bookedOverlap.end_at)} 重疊。為保障報名資料，請先調整時間區段。`);
+      return;
+    }
+
+    const generated: SessionDraft[] = [];
+    for (let cursor = startMinutes; cursor < endMinutes; cursor += interval) {
+      const slotStart = dateTimeForSession(sessionDate, minutesToTime(cursor));
+      const slotEnd = dateTimeForSession(sessionDate, minutesToTime(cursor + interval));
+      generated.push({
+        id: crypto.randomUUID(),
+        session_date: sessionDate,
+        start_at: slotStart.toISOString(),
+        end_at: slotEnd.toISOString(),
+        capacity,
+        confirmed_count: 0,
+        sort_order: 0,
+        is_active: true,
+        sub_activity_name: "",
+        sub_activity_key: null,
+      });
+    }
+
+    const overlappingIds = new Set(overlapping.map((session) => session.id));
+    setSessions((current) => {
+      const preserved = current.filter((session) => !overlappingIds.has(session.id));
+      return [...preserved, ...generated]
+        .sort((a, b) => a.start_at.localeCompare(b.start_at))
+        .map((session, index) => ({ ...session, sort_order: index }));
+    });
+
+    const nextStart = generator.endTime;
+    const nextStartMinutes = endMinutes;
+    const nextEndMinutes = Math.min(nextStartMinutes + Math.max(60, duration), 23 * 60 + 59);
+    setIntervalGenerators((current) => ({
+      ...current,
+      [sessionDate]: {
+        ...generator,
+        startTime: nextStart,
+        endTime: minutesToTime(nextEndMinutes),
+      },
+    }));
+  }
+
+  function addCustomField() {
+    setCustomFields((current) => [...current, { id: crypto.randomUUID(), label: "", type: "short_text", required: false, options: [] }]);
+  }
+
+  function updateCustomField(id: string, patch: Partial<CustomRegistrationField>) {
+    setCustomFields((current) => current.map((field) => field.id === id ? { ...field, ...patch } : field));
+  }
+
+  function removeCustomField(id: string) {
+    setCustomFields((current) => current.filter((field) => field.id !== id));
+  }
+
+  function customFieldNeedsOptions(type: CustomRegistrationFieldType) {
+    return ["single_choice", "multiple_choice", "select"].includes(type);
+  }
+
+  function toggleMethod(method: RegistrationMethod) {
+    setMethods((current) => current.includes(method) ? current.filter((item) => item !== method) : [...current, method]);
+  }
+
+  async function upload(file: File, target: "poster" | "hero") {
+    setUploading(true);
+    setError("");
+    try {
+      const preparedFile = await prepareImageForUpload(file);
+      const body = new FormData();
+      body.append("file", preparedFile);
+      const response = await fetch("/api/admin/upload", { method: "POST", body });
+      const result = await readJsonResponse<{ url?: string; error?: string }>(response);
+      if (!response.ok) throw new Error(result.error || "圖片上載失敗");
+      if (!result.url) throw new Error("圖片上載完成但未取得圖片網址");
+      if (target === "poster") setPosterUrl(result.url);
+      else setHeroUrl(result.url);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "圖片上載失敗");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function submit(formEvent: FormEvent<HTMLFormElement>) {
+    formEvent.preventDefault();
+    setSaving(true);
+    setError("");
+    const form = new FormData(formEvent.currentTarget);
+    const value = (name: string) => String(form.get(name) || "").trim();
+    const cleanSubActivities = subActivities.map((item) => ({ id: String(item.id || "").trim(), name: item.name.trim() }));
+    const validSubActivityIds = new Set(cleanSubActivities.map((item) => item.id));
+    const modeSessions = isMulti
+      ? sessions.filter((session) => subActivityMode
+          ? Boolean(String(session.sub_activity_key || "").trim()) && validSubActivityIds.has(String(session.sub_activity_key || "").trim())
+          : !String(session.sub_activity_key || "").trim())
+      : [];
+    if (isMulti && !subActivityMode && modeSessions.length === 0) { setError("多時段模式最少需要建立一個活動時段。"); setSaving(false); return; }
+    if (isMulti && subActivityMode) {
+      const names = cleanSubActivities.map((item) => item.name);
+      if (names.length === 0 || names.some((name) => !name)) { setError("請為每個子活動輸入名稱"); setSaving(false); return; }
+      if (new Set(names.map((name) => name.toLowerCase())).size !== names.length) { setError("子活動名稱不可重複"); setSaving(false); return; }
+      if (cleanSubActivities.some((item) => !item.id) || validSubActivityIds.size !== cleanSubActivities.length) { setError("子活動識別資料異常，請重新新增有問題的子活動後再儲存。"); setSaving(false); return; }
+    }
+    const normalizedSessions = modeSessions.map((session, index) => ({
+      ...(event?.sessions?.some((item) => item.id === session.id) ? { id: session.id } : {}),
+      session_date: session.session_date,
+      start_at: hongKongSessionIso(session.session_date, hongKongTime(session.start_at)),
+      end_at: hongKongSessionIso(session.session_date, hongKongTime(session.end_at)),
+      capacity: Number(session.capacity),
+      sort_order: index,
+      is_active: session.is_active,
+      sub_activity_name: subActivityMode ? String(session.sub_activity_name || "").trim() : null,
+      sub_activity_key: subActivityMode ? String(session.sub_activity_key || "").trim() : null,
+    }));
+    const invalidSession = normalizedSessions.find((item) => new Date(item.end_at).getTime() <= new Date(item.start_at).getTime());
+    if (invalidSession) {
+      setError(`${invalidSession.session_date} 有時段的結束時間必須遲於開始時間`);
+      setSaving(false);
+      return;
+    }
+    const sortedStarts = normalizedSessions.map((item) => item.start_at).sort();
+    const sortedEnds = normalizedSessions.map((item) => item.end_at).sort();
+    const registrationDeadlineIso = new Date(value("registration_deadline")).toISOString();
+    const draftFallbackStart = event?.start_at ? new Date(event.start_at).toISOString() : new Date(new Date(registrationDeadlineIso).getTime() + 60_000).toISOString();
+    const draftFallbackEnd = event?.end_at ? new Date(event.end_at).toISOString() : new Date(new Date(draftFallbackStart).getTime() + 60 * 60_000).toISOString();
+    const startAtIso = isMulti ? (sortedStarts[0] || draftFallbackStart) : new Date(value("start_at")).toISOString();
+    const endAtIso = isMulti ? (sortedEnds.at(-1) || draftFallbackEnd) : new Date(value("end_at")).toISOString();
+    let registrationStartAtIso: string;
+    if (registrationStartMode === "immediate") {
+      if (new Date(registrationDeadlineIso).getTime() <= Date.now()) {
+        registrationStartAtIso = registrationDeadlineIso;
+      } else if (event?.registration_start_at && new Date(event.registration_start_at).getTime() <= Date.now()) {
+        registrationStartAtIso = new Date(event.registration_start_at).toISOString();
+      } else {
+        registrationStartAtIso = new Date().toISOString();
+      }
+    } else {
+      registrationStartAtIso = new Date(value("registration_start_at")).toISOString();
+    }
+    const payload = {
+      title: value("title"),
+      slug: value("slug"),
+      subtitle: value("subtitle") || null,
+      summary: value("summary"),
+      description: value("description"),
+      category: value("category"),
+      location: value("location"),
+      address: value("address") || null,
+      start_at: startAtIso,
+      end_at: endAtIso,
+      registration_start_at: registrationStartAtIso,
+      registration_deadline: registrationDeadlineIso,
+      capacity: isMulti ? Math.max(1, totalSessionCapacity) : Number(form.get("capacity")),
+      status: value("status"),
+      registration_methods: methods,
+      hero_image_url: heroUrl,
+      poster_image_url: posterUrl,
+      contact_name: value("contact_name") || null,
+      contact_phone: value("contact_phone") || null,
+      contact_address: value("contact_address") || null,
+      is_featured: form.get("is_featured") === "on",
+      accepts_waitlist: form.get("accepts_waitlist") === "on",
+      registration_visibility: registrationVisibility,
+      invite_code: !externalRegistration && registrationVisibility === "private" ? (inviteCode.trim() || null) : null,
+      external_registration: externalRegistration,
+      external_registration_url: externalRegistration ? (value("external_registration_url") || null) : null,
+      external_registration_organization: externalRegistration ? (value("external_registration_organization") || null) : null,
+      email_required: emailRequired,
+      notes_required: notesRequired,
+      custom_registration_fields: customFields.map((field) => ({ ...field, label: field.label.trim(), options: (field.options || []).map((option) => option.trim()).filter(Boolean) })),
+      is_multi_session: isMulti,
+      sub_activity_mode: isMulti && subActivityMode,
+      max_sub_activity_selections: isMulti && subActivityMode ? maxSubActivitySelections : Number(event?.max_sub_activity_selections || 1),
+      sub_activity_definitions: isMulti && subActivityMode ? cleanSubActivities : (event?.sub_activity_definitions || []),
+      sessions: normalizedSessions,
+    };
+
+    try {
+      const response = await fetch(event ? `/api/admin/events/${event.id}` : "/api/admin/events", {
+        method: event ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "未能儲存活動");
+      router.push("/admin");
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "未能儲存活動");
+      setSaving(false);
+    }
+  }
+
+  async function remove() {
+    if (!event || !window.confirm(`確定刪除「${event.title}」？相關報名紀錄存在時系統會拒絕刪除。`)) return;
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/events/${event.id}`, { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "未能刪除活動");
+      router.push("/admin");
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "未能刪除活動");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="admin-event-form" onSubmit={submit}>
+      {event && <div className="notice notice-info event-edit-notice"><AlertCircle /><div><strong>現正編輯已建立活動</strong><span>你可以修改以下所有活動資料，包括活動內容、日期時間、名額及候補設定。名額只不可低於目前已確認人數。</span></div></div>}
+
+      <section className="admin-form-section">
+        <div className="section-heading"><h2>基本資料</h2><span>活動名稱、分類及公開狀態</span></div>
+        <div className="form-grid">
+          <label className="field field-full"><span>活動名稱 *</span><input name="title" required defaultValue={event?.title} /></label>
+          <label className="field"><span>網址 Slug *</span><input name="slug" required defaultValue={event?.slug} placeholder="ocean-sustainability-week" /></label>
+          <label className="field"><span>分類 *</span><input name="category" required defaultValue={event?.category || "講座"} /></label>
+          <label className="field field-full"><span>副標題</span><input name="subtitle" defaultValue={event?.subtitle || ""} /></label>
+          <label className="field field-full"><span>活動簡介 *</span><textarea name="summary" rows={3} required defaultValue={event?.summary} /></label>
+          <label className="field field-full"><span>活動詳情 *</span><textarea name="description" rows={8} required defaultValue={event?.description} /></label>
+          <label className="field"><span>狀態</span><select name="status" defaultValue={event?.status || "draft"}><option value="draft">草稿</option><option value="published">公開</option><option value="cancelled">取消</option></select></label>
+          <label className="field checkbox-field"><input type="checkbox" name="is_featured" defaultChecked={event?.is_featured} /><span>設為精選活動</span></label>
+        </div>
+      </section>
+
+      <section className="admin-form-section external-registration-settings">
+        <div className="section-heading"><h2>外部連結報名</h2><span>如由其他機構或外部系統負責收集報名，可將用戶導向指定網址。</span></div>
+        <label className="field checkbox-field field-full external-registration-toggle">
+          <input type="checkbox" checked={externalRegistration} onChange={(e) => setExternalRegistration(e.target.checked)} />
+          <span><strong>使用外部連結報名</strong><small>啟用後，前台不會顯示本系統報名人數／剩餘名額，亦不會使用本網站的報名表。</small></span>
+        </label>
+        {externalRegistration && <div className="form-grid external-registration-fields">
+          <label className="field"><span>負責機構 *</span><input name="external_registration_organization" required defaultValue={event?.external_registration_organization || ""} placeholder="例如：聖公會聖匠堂長者地區中心" /></label>
+          <label className="field"><span>外部報名網址 *</span><input name="external_registration_url" type="url" required defaultValue={event?.external_registration_url || ""} placeholder="https://..." /></label>
+          <div className="notice notice-info field-full"><AlertCircle /><div><strong>前台會先顯示離站提示</strong><span>用戶同意「你正離開網站報名，前往『負責機構』提供的報名連結」後，才會開啟外部網址。</span></div></div>
+        </div>}
+      </section>
+
+      <section className="admin-form-section event-access-settings">
+        <div className="section-heading"><h2>報名存取方式</h2><span>{externalRegistration ? "外部連結報名已啟用，本設定暫不會套用到前台。" : "設定活動是否需要邀請碼才可進入報名表。"}</span></div>
+        <div className="registration-visibility-options" role="radiogroup" aria-label="活動報名存取方式">
+          <label className={registrationVisibility === "public" ? "selected" : ""}>
+            <input type="radio" name="registration_visibility" value="public" checked={registrationVisibility === "public"} disabled={externalRegistration} onChange={() => setRegistrationVisibility("public")} />
+            <span><strong>公開報名</strong><small>與現時一樣，任何人都可進入活動報名頁。</small></span>
+          </label>
+          <label className={registrationVisibility === "private" ? "selected" : ""}>
+            <input type="radio" name="registration_visibility" value="private" checked={registrationVisibility === "private"} disabled={externalRegistration} onChange={() => setRegistrationVisibility("private")} />
+            <span><strong>非公開報名</strong><small>用戶必須先輸入正確邀請碼，才可進入報名表。</small></span>
+          </label>
+        </div>
+        {!externalRegistration && registrationVisibility === "private" && (
+          <div className="private-invite-code-panel">
+            <div className="private-invite-code-heading"><KeyRound /><div><strong>活動邀請碼</strong><small>{event?.invite_code_configured ? "此活動已有邀請碼。留空會保留原有邀請碼；輸入或重新產生會取代舊碼。" : "請設定邀請碼，或使用系統自動產生。"}</small></div></div>
+            <div className="invite-code-editor">
+              <label className="field"><span>{event?.invite_code_configured ? "新邀請碼（選填）" : "邀請碼 *"}</span><input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} minLength={4} maxLength={40} placeholder={event?.invite_code_configured ? "留空沿用原邀請碼" : "最少 4 個字元"} /></label>
+              <button type="button" className="button button-secondary" onClick={generateInviteCode}><RefreshCw />產生邀請碼</button>
+            </div>
+            {inviteCode && <div className="generated-invite-code"><span>目前設定的新邀請碼</span><strong>{inviteCode}</strong><small>請在儲存活動後將此邀請碼提供給獲邀人士。</small></div>}
+          </div>
+        )}
+      </section>
+
+      <section className="admin-form-section">
+        <div className="section-heading"><h2>日期、地點及名額</h2><span>系統會按開始時間、名額與截止時間自動控制報名</span></div>
+        <div className="form-grid">
+          {!isMulti && <><label className="field"><span>活動開始時間 *</span><input name="start_at" type="datetime-local" required defaultValue={localInput(event?.start_at)} /></label>
+          <label className="field"><span>活動結束時間 *</span><input name="end_at" type="datetime-local" required defaultValue={localInput(event?.end_at)} /></label></>}
+          <div className="field field-full">
+            <span>開始報名日期 *</span>
+            <div className="registration-start-options" role="radiogroup" aria-label="選擇開始報名方式">
+              <label className={registrationStartMode === "immediate" ? "selected" : ""}>
+                <input type="radio" name="registration_start_mode" value="immediate" checked={registrationStartMode === "immediate"} onChange={() => setRegistrationStartMode("immediate")} />
+                <Zap /><span><strong>即時開始</strong><small>儲存並公開活動後可立即接受報名；如建立過往活動，系統會自動以截止報名時間作為開始報名時間。</small></span>
+              </label>
+              <label className={registrationStartMode === "scheduled" ? "selected" : ""}>
+                <input type="radio" name="registration_start_mode" value="scheduled" checked={registrationStartMode === "scheduled"} onChange={() => setRegistrationStartMode("scheduled")} />
+                <Clock3 /><span><strong>指定日期及時間</strong><small>系統會於指定時間自動開放報名</small></span>
+              </label>
+            </div>
+          </div>
+          <label className="field"><span>指定開始報名時間</span><input name="registration_start_at" type="datetime-local" required={registrationStartMode === "scheduled"} disabled={registrationStartMode === "immediate"} defaultValue={localInput(event?.registration_start_at)} /></label>
+          <label className="field"><span>截止報名時間 *</span><input name="registration_deadline" type="datetime-local" required defaultValue={localInput(event?.registration_deadline)} /></label>
+          {!isMulti && <label className="field"><span>人數上限 *</span><input name="capacity" type="number" min={Math.max(1, event?.confirmed_count || 0)} required defaultValue={event?.capacity || 50} /><small>{event ? `目前已確認 ${event.confirmed_count} 人；可增加名額，最低不可少於 ${event.confirmed_count} 人。` : "設定活動可接受的正選人數。"}</small></label>}
+          {isMulti && <div className="field field-full sub-activity-mode-settings">
+            <label className="checkbox-field"><input type="checkbox" checked={subActivityMode} onChange={(e)=>changeSubActivityMode(e.target.checked)} /><span><strong>啟用「子活動」模式</strong><small>啟用後會使用獨立的子活動及時段資料，不受普通多時段設定影響；先建立子活動，再為各子活動新增日期、時段及名額。</small></span></label>
+            {subActivityMode && <label className="field"><span>每人最多可報名子活動數目 *</span><input type="number" min={1} max={50} value={maxSubActivitySelections} onChange={(e)=>setMaxSubActivitySelections(Math.max(1,Math.min(50,Number(e.target.value)||1)))} /><small>系統會阻止同一報名內時間互相重疊的子活動。</small></label>}
+          </div>}
+          {isMulti && <div className="field"><span>全部時段總名額</span><strong className="session-capacity-total">{totalSessionCapacity} 人</strong></div>}
+          <label className="field checkbox-field field-full waitlist-setting-field"><input type="checkbox" name="accepts_waitlist" defaultChecked={Boolean(event?.accepts_waitlist)} /><span><strong>正選滿額後接受候補登記</strong><small>可隨時開啟或關閉。開啟後，正選滿額時前台只顯示「現只接受候補」，不會顯示候補人數；關閉後滿額即停止報名。</small></span></label>
+          <label className="field"><span>活動地點 *</span><input name="location" required defaultValue={event?.location} /></label>
+          <label className="field"><span>完整地址</span><input name="address" defaultValue={event?.address || ""} /></label>
+        </div>
+      </section>
+
+      {isMulti && <section className="admin-form-section multi-session-builder">
+        {subActivityMode ? <>
+          <div className="section-heading"><div><h2>子活動及時段</h2><span>先建立子活動，再於每個子活動內新增日期、時段及人數。每個子活動可獨立管理及匯出參加者名單。</span></div><button type="button" className="button button-secondary button-small" onClick={addSubActivity}><Plus />新增子活動</button></div>
+          {(() => {
+            const validIds = new Set(subActivities.map((item) => item.id));
+            const unassigned = sessions.filter((item) => !String(item.sub_activity_key || "").trim() || !validIds.has(String(item.sub_activity_key || "")));
+            if (unassigned.length === 0) return null;
+            return <article className="multi-date-editor-card unassigned-session-card">
+              <header className="multi-date-editor-header"><div><Clock3 /><div><strong>未分配舊時段</strong><small>以下係舊有多時段資料。佢哋會原封不動保留，唔會阻止你儲存；你亦可以逐個分配到子活動。</small></div></div><strong>{unassigned.length} 個時段</strong></header>
+              <div className="date-session-editor-list">{unassigned.map((session, sessionIndex) => <section className="date-session-editor-row" key={session.id}>
+                <strong>舊時段 {sessionIndex + 1}</strong>
+                <div className="field"><span>日期</span><b>{session.session_date}</b></div>
+                <div className="field"><span>時間</span><b>{hongKongTime(session.start_at)}–{hongKongTime(session.end_at)}</b></div>
+                <div className="field"><span>名額</span><b>{session.capacity} 人</b></div>
+                <label className="field"><span>分配至子活動</span><select value="" onChange={(e)=>assignSessionToSubActivity(session.id,e.target.value)}><option value="">暫時保留未分配</option>{subActivities.filter((item)=>item.name.trim()).map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+              </section>)}</div>
+            </article>;
+          })()}
+          <div className="multi-date-editor-list sub-activity-builder-list">
+            {subActivities.map((activity, activityIndex) => {
+              const activityName = activity.name.trim();
+              const activitySessions = sessions.filter((item) => String(item.sub_activity_key || "") === activity.id).sort((a,b)=>a.start_at.localeCompare(b.start_at));
+              const activityCapacity = activitySessions.reduce((sum,item)=>sum+Number(item.capacity||0),0);
+              return <article className="multi-date-editor-card sub-activity-builder-card" key={activity.id}>
+                <header className="multi-date-editor-header">
+                  <div><CalendarDays /><label className="field sub-activity-title-field"><span>子活動 {activityIndex + 1} 名稱 *</span><input value={activity.name} onChange={(e)=>renameSubActivity(activity.id,e.target.value)} placeholder="例如：禪繞畫工作坊" required /></label>{activityName && <strong>總名額 {activityCapacity} 人</strong>}</div>
+                  <div><button type="button" className="button button-secondary button-small" onClick={()=>addSubActivitySession(activity)} disabled={!activityName}><Plus />新增時段</button><button type="button" className="icon-button danger" onClick={()=>removeSubActivity(activity.id)} disabled={subActivities.length===1}><Trash2 /></button></div>
+                </header>
+                {activitySessions.length === 0 ? <div className="empty-session-drop"><Clock3 /><span>子活動已建立。你可以按「新增時段」設定日期、時間及人數；如暫時未設定時段，可先以「草稿」儲存。</span></div> : <div className="date-session-editor-list">
+                  {activitySessions.map((session, sessionIndex) => {
+                    const index = sessions.findIndex((item)=>item.id===session.id);
+                    return <section className="date-session-editor-row" key={session.id}>
+                      <strong>時段 {sessionIndex + 1}</strong>
+                      <label className="field"><span>日期 *</span><input type="date" value={session.session_date} onChange={(e)=>updateSession(index,{session_date:e.target.value,start_at:hongKongSessionIso(e.target.value,hongKongTime(session.start_at)),end_at:hongKongSessionIso(e.target.value,hongKongTime(session.end_at))})} required /></label>
+                      <label className="field"><span>開始時間 *</span><input type="time" value={hongKongTime(session.start_at)} onChange={(e)=>updateSession(index,{start_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label>
+                      <label className="field"><span>結束時間 *</span><input type="time" value={hongKongTime(session.end_at)} onChange={(e)=>updateSession(index,{end_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label>
+                      <label className="field"><span>人數上限 *</span><input type="number" min={Math.max(1,session.confirmed_count||0)} value={session.capacity} onChange={(e)=>updateSession(index,{capacity:Number(e.target.value)})} required /><small>{event?`已確認 ${session.confirmed_count||0} 人；可增加名額。`:"此時段正選名額"}</small></label>
+                      <label className="field checkbox-field"><input type="checkbox" checked={session.is_active} onChange={(e)=>updateSession(index,{is_active:e.target.checked})} /><span>開放</span></label>
+                      <button type="button" className="icon-button danger" onClick={()=>removeSession(index)} disabled={Number(session.confirmed_count||0)>0}><Trash2 /></button>
+                    </section>;
+                  })}
+                </div>}
+              </article>;
+            })}
+          </div>
+        </> : <>
+          <div className="section-heading"><div><h2>活動日期及時段</h2><span>可手動新增時段，或按開始時間、結束時間及節數間隔批量產生時段</span></div><button type="button" className="button button-secondary button-small" onClick={addDate}><CalendarPlus />新增日期</button></div>
+          <div className="multi-date-editor-list">
+            {sessionDates.map((sessionDate, dateIndex) => {
+              const dateSessions = sessions.filter((item) => !String(item.sub_activity_key || "").trim() && item.session_date === sessionDate).sort((a,b)=>a.start_at.localeCompare(b.start_at));
+              const dateCapacity = dateSessions.reduce((sum,item)=>sum+Number(item.capacity||0),0);
+              return <article className="multi-date-editor-card" key={sessionDate}>
+                <header className="multi-date-editor-header"><div><CalendarDays /><label><span>活動日期 {dateIndex + 1}</span><input type="date" value={sessionDate} onChange={(e)=>updateDate(sessionDate,e.target.value)} required /></label><strong>當日總名額 {dateCapacity} 人</strong></div><div><button type="button" className="button button-secondary button-small" onClick={()=>addSessionForDate(sessionDate)}><Plus />新增時段</button><button type="button" className="icon-button danger" onClick={()=>removeDate(sessionDate)} disabled={sessionDates.length===1}><Trash2 /></button></div></header>
+                {(() => { const generator=getIntervalGenerator(sessionDate,dateSessions); const savedBlocks=inferIntervalBlocks(dateSessions); const duration=Math.max(0,timeToMinutes(generator.endTime)-timeToMinutes(generator.startTime)); const slotCount=generator.intervalMinutes>0&&duration>0&&duration%generator.intervalMinutes===0?duration/generator.intervalMinutes:0; return <div className="interval-session-generator"><div className="interval-session-generator-heading"><div><Clock3 /><span><strong>按節數間隔快速產生時段</strong><small>同一日可重複使用不同設定，例如 12:00–14:00 每 15 分鐘，再設定 14:00–16:00 每 30 分鐘。</small></span></div>{slotCount>0&&<b>將產生 {slotCount} 節</b>}</div>{event&&savedBlocks.length>0&&<div className="saved-interval-blocks"><strong>目前已儲存的節數設定</strong><div>{savedBlocks.map((block,blockIndex)=><button type="button" key={`${block.startTime}-${block.endTime}-${blockIndex}`} className="saved-interval-block" onClick={()=>updateIntervalGenerator(sessionDate,dateSessions,{startTime:block.startTime,endTime:block.endTime,intervalMinutes:block.intervalMinutes,capacity:block.capacity})}><span>{block.startTime}–{block.endTime}</span><small>每 {block.intervalMinutes} 分鐘 · {block.slotCount} 節 · 每節 {block.capacity} 人</small></button>)}</div><small>點擊任何一組即可載入到下方修改。</small></div>}<div className="interval-session-generator-grid"><label className="field"><span>開始時間</span><input type="time" value={generator.startTime} onChange={(e)=>updateIntervalGenerator(sessionDate,dateSessions,{startTime:e.target.value})}/></label><label className="field"><span>結束時間</span><input type="time" value={generator.endTime} onChange={(e)=>updateIntervalGenerator(sessionDate,dateSessions,{endTime:e.target.value})}/></label><label className="field"><span>節數間隔（分鐘）</span><input type="number" min={1} max={720} step={1} value={generator.intervalMinutes} onChange={(e)=>updateIntervalGenerator(sessionDate,dateSessions,{intervalMinutes:Number(e.target.value)})}/></label><label className="field"><span>每節名額</span><input type="number" min={1} max={100000} step={1} value={generator.capacity} onChange={(e)=>updateIntervalGenerator(sessionDate,dateSessions,{capacity:Number(e.target.value)})}/></label><button type="button" className="button button-primary interval-generate-button" onClick={()=>generateIntervalSessions(sessionDate,dateSessions)}><Plus />產生時段</button></div></div>; })()}
+                <div className="date-session-editor-list">{dateSessions.map((session,sessionIndex)=>{const index=sessions.findIndex((item)=>item.id===session.id);return <section className="date-session-editor-row" key={session.id}><strong>時段 {sessionIndex+1}</strong><label className="field"><span>開始時間 *</span><input type="time" value={hongKongTime(session.start_at)} onChange={(e)=>updateSession(index,{start_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label><label className="field"><span>結束時間 *</span><input type="time" value={hongKongTime(session.end_at)} onChange={(e)=>updateSession(index,{end_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label><label className="field"><span>人數上限 *</span><input type="number" min={Math.max(1,session.confirmed_count||0)} value={session.capacity} onChange={(e)=>updateSession(index,{capacity:Number(e.target.value)})} required /></label><label className="field checkbox-field"><input type="checkbox" checked={session.is_active} onChange={(e)=>updateSession(index,{is_active:e.target.checked})}/><span>開放</span></label><button type="button" className="icon-button danger" onClick={()=>removeSession(index)} disabled={activeModeSessions.length===1||dateSessions.length===1}><Trash2 /></button></section>})}</div>
+              </article>;
+            })}
+          </div>
+        </>}
+      </section>}
+
+      {!externalRegistration && <section className="admin-form-section custom-registration-fields-section">
+        <div className="section-heading"><div><h2>報名資料欄目</h2><span>姓名及電話固定為必填；電郵、備註可設定是否必填，亦可新增自訂欄目。</span></div><button type="button" className="button button-secondary button-small" onClick={addCustomField}><Plus />新增自訂欄目</button></div>
+        <div className="basic-registration-field-settings">
+          <div className="basic-registration-field-row"><strong>姓名</strong><span>固定必填</span></div>
+          <div className="basic-registration-field-row"><strong>電話</strong><span>固定必填</span></div>
+          <label className="basic-registration-field-row"><strong>電郵</strong><span><input type="checkbox" checked={emailRequired} onChange={(e)=>setEmailRequired(e.target.checked)} /> 必填</span></label>
+          <label className="basic-registration-field-row"><strong>備註</strong><span><input type="checkbox" checked={notesRequired} onChange={(e)=>setNotesRequired(e.target.checked)} /> 必填</span></label>
+        </div>
+        <div className="custom-field-builder-list">
+          {customFields.map((field, index) => <article className="custom-field-builder-row" key={field.id}>
+            <strong>自訂欄目 {index + 1}</strong>
+            <label className="field"><span>標題 *</span><input value={field.label} onChange={(e)=>updateCustomField(field.id,{label:e.target.value})} placeholder="例如：出生年份" required /></label>
+            <label className="field"><span>欄目種類</span><select value={field.type} onChange={(e)=>updateCustomField(field.id,{type:e.target.value as CustomRegistrationFieldType, options: customFieldNeedsOptions(e.target.value as CustomRegistrationFieldType) ? (field.options?.length ? field.options : ["選項 1","選項 2"]) : []})}><option value="short_text">短題目</option><option value="long_text">長題目</option><option value="single_choice">單選題</option><option value="multiple_choice">多選題</option><option value="select">下拉選單</option></select></label>
+            {customFieldNeedsOptions(field.type) && <label className="field field-full"><span>選項（每行一個） *</span><textarea rows={4} value={(field.options||[]).join("\n")} onChange={(e)=>updateCustomField(field.id,{options:e.target.value.split(/\r?\n/)})} placeholder={"男\n女"} required /></label>}
+            <label className="field checkbox-field"><input type="checkbox" checked={field.required} onChange={(e)=>updateCustomField(field.id,{required:e.target.checked})}/><span>必填</span></label>
+            <button type="button" className="icon-button danger" onClick={()=>removeCustomField(field.id)} aria-label={`刪除自訂欄目 ${index+1}`}><Trash2 /></button>
+          </article>)}
+          {customFields.length===0 && <p className="muted">未有自訂欄目。按「新增自訂欄目」可收集出生年份、性別、飲食需要等額外資料。</p>}
+        </div>
+      </section>}
+
+      <section className="admin-form-section">
+        <div className="section-heading"><h2>報名方法與聯絡資料</h2><span>最少選擇一種報名方法</span></div>
+        <div className="admin-method-checks">
+          <label><input type="checkbox" checked={methods.includes("online")} onChange={() => toggleMethod("online")} />網上報名</label>
+          <label><input type="checkbox" checked={methods.includes("in_person")} onChange={() => toggleMethod("in_person")} />親身報名</label>
+        </div>
+        <div className="form-grid">
+          <label className="field"><span>聯絡人／部門</span><input name="contact_name" defaultValue={event?.contact_name || ""} /></label>
+          <label className="field"><span>查詢電話</span><input name="contact_phone" defaultValue={event?.contact_phone || ""} /></label>
+          <label className="field field-full"><span>親身報名地址</span><input name="contact_address" defaultValue={event?.contact_address || ""} /></label>
+        </div>
+      </section>
+
+      <section className="admin-form-section">
+        <div className="section-heading"><h2>活動圖片</h2><span>可使用現有圖片網址或上載至 Supabase Storage</span></div>
+        <div className="image-admin-grid">
+          <div className="image-upload-card">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={posterUrl} alt="活動海報預覽" />
+            <label className="button button-secondary button-small"><ImageUp />上載海報<input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], "poster")} /></label>
+            <input aria-label="海報圖片網址" value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)} />
+          </div>
+          <div className="image-upload-card wide">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={heroUrl} alt="活動橫幅預覽" />
+            <label className="button button-secondary button-small"><ImageUp />上載橫幅<input type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], "hero")} /></label>
+            <input aria-label="橫幅圖片網址" value={heroUrl} onChange={(e) => setHeroUrl(e.target.value)} />
+          </div>
+        </div>
+        {uploading && <p className="muted"><LoaderCircle className="spin inline-icon" />圖片上載中…</p>}
+      </section>
+
+      {error && <div className="notice notice-error"><AlertCircle />{error}</div>}
+      <div className="admin-form-actions">
+        {event && <button type="button" onClick={remove} className="button button-danger" disabled={saving}><Trash2 />刪除活動</button>}
+        <button type="submit" className="button button-primary button-large" disabled={saving || uploading || methods.length === 0}>
+          {saving ? <><LoaderCircle className="spin" />儲存中…</> : <><Save />儲存活動</>}
+        </button>
+      </div>
+    </form>
+  );
+}

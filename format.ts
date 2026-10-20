@@ -1,0 +1,74 @@
+import type { EventRecord } from "@/lib/types";
+
+const dateTimeFormatter = new Intl.DateTimeFormat("zh-HK", {
+  timeZone: "Asia/Hong_Kong",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  weekday: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+const dateFormatter = new Intl.DateTimeFormat("zh-HK", {
+  timeZone: "Asia/Hong_Kong",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  weekday: "short",
+});
+
+const timeFormatter = new Intl.DateTimeFormat("zh-HK", {
+  timeZone: "Asia/Hong_Kong",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+export type EventRegistrationState = "upcoming" | "open" | "waitlist" | "full" | "closed";
+
+export function formatDateTime(value: string): string {
+  return dateTimeFormatter.format(new Date(value));
+}
+
+export function formatEventDate(event: Pick<EventRecord, "start_at" | "end_at">): string {
+  const start = new Date(event.start_at);
+  const end = new Date(event.end_at);
+  return `${dateFormatter.format(start)} ${timeFormatter.format(start)}–${timeFormatter.format(end)}`;
+}
+
+export function formatDeadline(value: string): string {
+  return dateTimeFormatter.format(new Date(value));
+}
+
+export function remainingSeats(event: Pick<EventRecord, "capacity" | "confirmed_count">): number {
+  return Math.max(0, event.capacity - event.confirmed_count);
+}
+
+export function isRegistrationNotStarted(event: Pick<EventRecord, "registration_start_at" | "status">): boolean {
+  return event.status === "published" && new Date(event.registration_start_at).getTime() > Date.now();
+}
+
+export function isRegistrationClosed(event: Pick<EventRecord, "registration_deadline" | "status">): boolean {
+  return event.status !== "published" || new Date(event.registration_deadline).getTime() <= Date.now();
+}
+
+export function eventRegistrationState(event: EventRecord): EventRegistrationState {
+  if (event.status !== "published") return "closed";
+  if (isRegistrationNotStarted(event)) return "upcoming";
+  if (isRegistrationClosed(event)) return "closed";
+  if (event.external_registration) return "open";
+  if (event.confirmed_count >= event.capacity) return event.accepts_waitlist ? "waitlist" : "full";
+  return "open";
+}
+
+export type CapacitySignal = "open" | "popular" | "limited" | "waitlist" | "full";
+export function capacitySignal(event: EventRecord): { key: CapacitySignal; label: string } {
+  const capacity = Math.max(1, event.capacity);
+  const ratio = remainingSeats(event) / capacity;
+  if (ratio <= 0) return event.accepts_waitlist ? { key: "waitlist", label: "只接受候補" } : { key: "full", label: "名額已滿" };
+  if (ratio <= 0.19) return { key: "limited", label: "尚餘少量" };
+  if (ratio <= 0.49) return { key: "popular", label: "反應熱烈" };
+  return { key: "open", label: "開放報名" };
+}

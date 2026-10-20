@@ -1,0 +1,18 @@
+import type { EventRecord } from "@/lib/types";
+import { eventRegistrationState, remainingSeats } from "@/lib/format";
+
+export function StatusBadge({ event, compact = false }: { event: EventRecord; compact?: boolean }) {
+  const state = eventRegistrationState(event);
+  const label = event.external_registration && state === "open"
+    ? "外部連結報名"
+    : state === "upcoming"
+    ? "即將開始"
+    : state === "waitlist"
+      ? "只接受候補"
+      : state === "full"
+        ? "名額已滿"
+        : state === "closed"
+          ? "報名已截止"
+          : `尚餘 ${remainingSeats(event)} 位`;
+  return <span className={`status-badge status-${state} ${compact ? "compact" : ""}`}>{label}</span>;
+}

@@ -1,0 +1,55 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowLeft, CalendarDays, MapPin, UsersRound } from "lucide-react";
+import { RegistrationForm } from "@/components/registration-form";
+import { PrivateRegistrationFlow } from "@/components/private-registration-flow";
+import { ExternalRegistrationButton } from "@/components/external-registration-button";
+import { EventImage } from "@/components/event-image";
+import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
+import { getEventBySlug } from "@/lib/data";
+import { eventRegistrationState, formatDateTime, formatEventDate, remainingSeats } from "@/lib/format";
+import type { RegistrationMethod } from "@/lib/types";
+
+export const metadata: Metadata = { title: "活動報名" };
+
+export default async function RegisterPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ method?: string }> }) {
+  const { slug } = await params;
+  const query = await searchParams;
+  const event = await getEventBySlug(slug);
+  if (!event) notFound();
+  const state = eventRegistrationState(event);
+  const method: RegistrationMethod = query.method === "in_person" ? "in_person" : "online";
+
+  return (
+    <>
+      <SiteHeader />
+      <main className="register-page shell">
+        <div className="breadcrumb"><Link href={`/events/${event.slug}`}><ArrowLeft />返回活動詳情</Link></div>
+        <div className="register-layout">
+          <section className="register-main">
+            <div className="page-title"><span>{state === "waitlist" ? "候補登記表" : "活動報名表"}</span><h1>{state === "waitlist" ? "正選已滿，現只接受候補" : "完成你的活動申請"}</h1><p>{state === "waitlist" ? "候補登記並不代表成功參加；如沒有收到主辦單位進一步通知，則視作未能申請。" : "填寫以下資料後，系統會即時核對名額並發送電子入場證。"}</p></div>
+            {event.external_registration && event.external_registration_url && event.external_registration_organization ? (
+              <div className="external-register-direct-guard"><p>此活動由外部機構處理報名，本網站不會收集報名資料。</p>{state === "open" ? <ExternalRegistrationButton url={event.external_registration_url} organization={event.external_registration_organization} /> : <div className="closed-message"><h2>{state === "upcoming" ? "活動尚未開始報名" : "報名已截止"}</h2></div>}</div>
+            ) : (state === "open" || state === "waitlist") ? (
+              event.registration_visibility === "private"
+                ? <PrivateRegistrationFlow event={event} initialMethod={method} />
+                : <RegistrationForm event={event} initialMethod={method} />
+            ) : (
+              <div className="closed-message"><h2>{state === "upcoming" ? "活動尚未開始報名" : state === "full" ? "活動名額已滿" : "報名已截止"}</h2><p>{state === "upcoming" ? `報名將於 ${formatDateTime(event.registration_start_at)} 開放。` : "此活動暫時未能接受新申請。"}</p><Link className="button button-primary" href="/">瀏覽其他活動</Link></div>
+            )}
+          </section>
+          <aside className="register-summary-card">
+            <div className="summary-poster"><EventImage src={event.poster_image_url} alt="" fill sizes="320px" objectFit="contain" objectPosition="center" /></div>
+            <span className="category-tag static">{event.category}</span>
+            <h2>{event.title}</h2>
+            <ul><li><CalendarDays />{event.is_multi_session ? (event.sub_activity_mode ? `${new Set((event.sessions||[]).map((item)=>item.sub_activity_name).filter(Boolean)).size} 個子活動可選` : `${event.sessions?.length || 0} 個日期／時段可選`) : formatEventDate(event)}</li><li><MapPin />{event.location}</li>{!event.external_registration && <li><UsersRound />{event.is_multi_session ? (event.sub_activity_mode ? `最多可選 ${event.max_sub_activity_selections || 1} 個子活動` : "請於表格選擇時段") : state === "waitlist" ? "現只接受候補" : `尚餘 ${remainingSeats(event)} 位`}</li>}</ul>
+            {event.external_registration ? <div className="summary-security"><strong>外部報名</strong><span>報名資料由 {event.external_registration_organization || "負責機構"} 的外部頁面處理。</span></div> : <div className="summary-security"><strong>安全報名流程</strong><span>提交資料後才會正式扣減名額；重複或逾時申請不會造成超額報名。</span></div>}
+          </aside>
+        </div>
+      </main>
+      <SiteFooter />
+    </>
+  );
+}

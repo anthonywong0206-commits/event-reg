@@ -1,0 +1,175 @@
+export type RegistrationMethod = "online" | "in_person";
+export type EventStatus = "draft" | "published" | "cancelled";
+export type RegistrationStatus = "confirmed" | "cancelled" | "waitlist";
+export type RegistrationVisibility = "public" | "private";
+export type CustomRegistrationFieldType = "short_text" | "long_text" | "single_choice" | "multiple_choice" | "select";
+
+export interface CustomRegistrationField {
+  id: string;
+  label: string;
+  type: CustomRegistrationFieldType;
+  required: boolean;
+  options?: string[];
+}
+export type HeroButtonPosition = "left" | "center" | "right";
+export type HeroButtonLinkType = "event" | "external";
+
+export interface SubActivityDefinition {
+  id: string;
+  name: string;
+}
+
+export interface EventSessionRecord {
+  id: string;
+  event_id: string;
+  session_date: string;
+  start_at: string;
+  end_at: string;
+  capacity: number;
+  confirmed_count: number;
+  sort_order: number;
+  is_active: boolean;
+  sub_activity_name?: string | null;
+  sub_activity_key?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface EventRecord {
+  id: string;
+  slug: string;
+  title: string;
+  subtitle: string | null;
+  summary: string;
+  description: string;
+  category: string;
+  location: string;
+  address: string | null;
+  start_at: string;
+  end_at: string;
+  registration_start_at: string;
+  registration_deadline: string;
+  capacity: number;
+  confirmed_count: number;
+  status: EventStatus;
+  registration_methods: RegistrationMethod[];
+  hero_image_url: string;
+  poster_image_url: string;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_address: string | null;
+  is_featured: boolean;
+  accepts_waitlist?: boolean;
+  registration_visibility?: RegistrationVisibility;
+  invite_code_configured?: boolean;
+  external_registration?: boolean;
+  external_registration_url?: string | null;
+  external_registration_organization?: string | null;
+  email_required?: boolean;
+  notes_required?: boolean;
+  custom_registration_fields?: CustomRegistrationField[];
+  is_multi_session: boolean;
+  sub_activity_mode?: boolean;
+  max_sub_activity_selections?: number;
+  sub_activity_definitions?: SubActivityDefinition[];
+  sessions?: EventSessionRecord[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface RegistrationRecord {
+  id: string;
+  event_id: string;
+  session_id: string | null;
+  registration_group_id?: string | null;
+  session?: EventSessionRecord | null;
+  registration_no: string;
+  full_name: string;
+  email: string | null;
+  phone: string;
+  method: RegistrationMethod;
+  status: RegistrationStatus;
+  qr_token: string;
+  attended_at: string | null;
+  notes: string | null;
+  custom_answers?: Record<string, string | string[]>;
+  email_sent?: boolean;
+  email_error?: string | null;
+  created_at: string;
+  updated_at?: string;
+  event?: EventRecord;
+}
+
+export interface RegistrationResult {
+  id: string;
+  registration_no: string;
+  qr_token: string;
+  email_sent: boolean;
+  status?: RegistrationStatus;
+}
+
+export interface SiteSettingsRecord {
+  setting_key: "homepage";
+  hero_title: string;
+  hero_description: string;
+  hero_image_url: string;
+  hero_image_alt: string;
+  hero_button_enabled: boolean;
+  hero_button_label: string;
+  hero_button_position: HeroButtonPosition;
+  hero_button_link_type: HeroButtonLinkType;
+  hero_button_event_slug: string | null;
+  hero_button_external_url: string | null;
+  updated_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type TelegramNotificationFrequency = "instant" | "3h" | "12h" | "daily";
+
+export interface TelegramNotificationSettingsRecord {
+  setting_key: "admin";
+  enabled: boolean;
+  frequency: TelegramNotificationFrequency;
+  chat_id: string | null;
+  chat_label: string | null;
+  bot_username: string | null;
+  connect_token?: string | null;
+  connect_expires_at?: string | null;
+  connected_at: string | null;
+  last_digest_at: string;
+  last_sent_at: string | null;
+  last_error: string | null;
+  updated_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TelegramNotificationQueueRecord {
+  id: string;
+  registration_id: string;
+  event_id: string;
+  processing_at: string | null;
+  delivered_at: string | null;
+  discarded_at: string | null;
+  attempts: number;
+  last_error: string | null;
+  telegram_message_id?: number | null;
+  created_at: string;
+}
+
+
+export type EmailTemplateKey = "standard" | "friendly" | "concise" | "custom";
+
+export interface EmailNotificationSettingsRecord {
+  setting_key: "registration_confirmation";
+  enabled: boolean;
+  template_key: EmailTemplateKey;
+  subject_template: string;
+  body_template: string;
+  include_qr: boolean;
+  reply_to: string | null;
+  updated_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
