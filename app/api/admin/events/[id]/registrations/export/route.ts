@@ -223,7 +223,7 @@ function buildSheet(options: {
   applyListLayout(ws, rows.length, columnCount);
   return ws;
 }
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await assertAdminForApi();
     if (!isServiceRoleConfigured()) {
@@ -231,11 +231,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     }
 
     const { id } = await params;
+    const subActivity = new URL(request.url).searchParams.get("subActivity")?.trim() || null;
     const admin = createAdminClient();
     const [{ data: event, error: eventError }, { data: registrations, error: registrationError }] = await Promise.all([
       admin
         .from("events")
-        .select("title, slug, start_at, end_at, is_multi_session, custom_registration_fields, sessions:event_sessions(id,session_date,start_at,end_at,sort_order,is_active,sub_activity_name)")
+        .select("title, slug, start_at, end_at, is_multi_session, sub_activity_mode, custom_registration_fields, sessions:event_sessions(id,session_date,start_at,end_at,sort_order,is_active,sub_activity_name)")
         .eq("id", id)
         .maybeSingle(),
       admin
@@ -249,7 +250,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     if (eventError || !event) return NextResponse.json({ error: "找不到活動" }, { status: 404 });
     if (registrationError) throw registrationError;
 
-    const confirmed = ((registrations ?? []) as ExportRegistration[]).sort(
+    let confirmed = ((registrations ?? []) as ExportRegistration[]).sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
     const customFields = Array.isArray(event.custom_registration_fields)
@@ -270,12 +271,18 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       });
       XLSX.utils.book_append_sheet(workbook, ws, safeSheetName(dateKey, "參加者名單"));
     } else {
-      const sessions = ((event.sessions ?? []) as ExportSession[]).sort((a, b) => {
+      const allSessions = ((event.sessions ?? []) as ExportSession[]).sort((a, b) => {
         const dateCompare = a.session_date.localeCompare(b.session_date);
         if (dateCompare !== 0) return dateCompare;
         const timeCompare = new Date(a.start_at).getTime() - new Date(b.start_at).getTime();
         return timeCompare !== 0 ? timeCompare : a.sort_order - b.sort_order;
       });
+      const sessions = subActivity
+        ? allSessions.filter((session) => String(session.sub_activity_name || "").trim() === subActivity)
+        : allSessions;
+      if (subActivity && sessions.length === 0) return NextResponse.json({ error: "找不到指定子活動" }, { status: 404 });
+      const selectedSessionIds = new Set(sessions.map((session) => session.id));
+      if (subActivity) confirmed = confirmed.filter((registration) => Boolean(registration.session_id && selectedSessionIds.has(registration.session_id)));
       const sessionById = new Map(sessions.map((session) => [session.id, session]));
       const dates = new Map<string, ExportSession[]>();
       for (const session of sessions) {
@@ -297,7 +304,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
           (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime() || a.sort_order - b.sort_order,
         );
         const sessionGroups = sortedDaySessions.map((session) => ({
-          label: `${session.sub_activity_name ? `${session.sub_activity_name} · ` : ""}${formatTimeRange(session.start_at, session.end_at)}`,
+          label: subActivity ? formatTimeRange(session.start_at, session.end_at) : `${session.sub_activity_name ? `${session.sub_activity_name} · ` : ""}${formatTimeRange(session.start_at, session.end_at)}`,
           registrations: confirmed.filter((registration) => registration.session_id === session.id),
         }));
 
@@ -317,7 +324,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
           0,
         );
         const ws = buildSheet({
-          eventTitle: event.title,
+          eventTitle: subActivity ? `${event.title}－${subActivity}` : event.title,
           dateLabel: formatDate(dateValue),
           overallTimeLabel,
           sessionGroups: groupsForSheet,
@@ -335,7 +342,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       compression: true,
       cellStyles: true,
     } as XLSX.WritingOptions) as Buffer;
-    const filename = `${event.slug}-participant-list.xlsx`;
+    const safeSubActivity = subActivity ? `-${subActivity.replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "")}` : "";
+    const filename = `${event.slug}${safeSubActivity}-participant-list.xlsx`;
 
     return new NextResponse(new Uint8Array(output), {
       headers: {

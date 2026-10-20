@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
     const firstStart = sessions.length ? sessions.map((item) => item.start_at).sort()[0] : eventPayload.start_at;
     const lastEnd = sessions.length ? sessions.map((item) => item.end_at).sort().at(-1)! : eventPayload.end_at;
-    const totalCapacity = eventPayload.is_multi_session ? sessions.reduce((sum, item) => sum + item.capacity, 0) : eventPayload.capacity;
+    const totalCapacity = eventPayload.is_multi_session ? Math.max(1, sessions.reduce((sum, item) => sum + item.capacity, 0)) : eventPayload.capacity;
     const { data, error } = await admin.from("events").insert({
       ...eventPayload,
       start_at: firstStart,
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       if (error.code === "23505") return NextResponse.json({ error: "此活動網址 Slug 已被使用" }, { status: 409 });
       throw error;
     }
-    if (eventPayload.is_multi_session) {
+    if (eventPayload.is_multi_session && sessions.length > 0) {
       const { error: sessionError } = await admin.from("event_sessions").insert(sessions.map((session, index) => ({
         event_id: data.id,
         session_date: session.session_date,
@@ -44,6 +44,7 @@ export async function POST(request: Request) {
         sort_order: index,
         is_active: session.is_active,
         sub_activity_name: session.sub_activity_name || null,
+        sub_activity_key: session.sub_activity_key || null,
       })));
       if (sessionError) {
         await admin.from("events").delete().eq("id", data.id);

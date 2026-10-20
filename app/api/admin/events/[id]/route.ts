@@ -24,10 +24,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
     const firstStart = sessions.length ? sessions.map((item) => item.start_at).sort()[0] : eventPayload.start_at;
     const lastEnd = sessions.length ? sessions.map((item) => item.end_at).sort().at(-1)! : eventPayload.end_at;
-    const totalCapacity = eventPayload.is_multi_session ? sessions.reduce((sum, item) => sum + item.capacity, 0) : eventPayload.capacity;
+    const totalCapacity = eventPayload.is_multi_session ? Math.max(1, sessions.reduce((sum, item) => sum + item.capacity, 0)) : eventPayload.capacity;
     if (totalCapacity < existing.confirmed_count) return NextResponse.json({ error: `總名額不可低於目前已確認人數 ${existing.confirmed_count}` }, { status: 409 });
 
-    if (eventPayload.is_multi_session) {
+    if (eventPayload.is_multi_session && sessions.length > 0) {
       const sessionPayload = sessions.map((session, index) => ({
         ...(session.id ? { id: session.id } : {}),
         session_date: session.session_date,
@@ -37,6 +37,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         sort_order: index,
         is_active: session.is_active,
         sub_activity_name: session.sub_activity_name || null,
+        sub_activity_key: session.sub_activity_key || null,
       }));
       const sessionResult = await admin.rpc("replace_event_sessions_safe", {
         p_event_id: id,
@@ -51,6 +52,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         if (message.includes("SESSION_NOT_FOUND")) return NextResponse.json({ error: "部分時段資料已被其他操作更新，請重新整理頁面後再試。" }, { status: 409 });
         throw sessionResult.error;
       }
+    } else if (eventPayload.is_multi_session && sessions.length === 0) {
+      const assigned = await admin.from("registrations").select("id", { count: "exact", head: true }).eq("event_id", id).not("session_id", "is", null);
+      if ((assigned.count || 0) > 0) return NextResponse.json({ error: "活動已有時段報名紀錄，不能刪除全部時段。你可以保留原有時段，或先處理相關報名。" }, { status: 409 });
+      const { error: deleteSessionError } = await admin.from("event_sessions").delete().eq("event_id", id);
+      if (deleteSessionError) throw deleteSessionError;
     } else if (existing.is_multi_session) {
       const assigned = await admin.from("registrations").select("id", { count: "exact", head: true }).eq("event_id", id).not("session_id", "is", null);
       if ((assigned.count || 0) > 0) return NextResponse.json({ error: "活動已有多時段參加者，不可改回單一時段" }, { status: 409 });
