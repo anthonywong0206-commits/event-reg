@@ -187,10 +187,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
           if (![...legacy.values()].includes(name)) legacy.set(key, name);
         });
         if (legacy.size) setSubActivities([...legacy.entries()].map(([id, name]) => ({ id, name })));
-        else if (sessions.every((item) => Number(item.confirmed_count || 0) === 0)) {
-          setSessions([]);
-          setSubActivities([{ id: crypto.randomUUID(), name: "" }]);
-        }
+        else setSubActivities([{ id: crypto.randomUUID(), name: "" }]);
       }
     } else if (sessions.length === 0) {
       setSessions([defaultSession()]);
@@ -204,6 +201,19 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   function renameSubActivity(id: string, nextName: string) {
     setSubActivities((current) => current.map((item) => item.id === id ? { ...item, name: nextName } : item));
     setSessions((current) => current.map((session) => String(session.sub_activity_key || "") === id ? { ...session, sub_activity_name: nextName } : session));
+  }
+
+  function assignSessionToSubActivity(sessionId: string, activityId: string) {
+    const activity = subActivities.find((item) => item.id === activityId);
+    if (!activity) return;
+    const name = activity.name.trim();
+    if (!name) { setError("請先輸入子活動名稱"); return; }
+    setSessions((current) => current.map((session) => session.id === sessionId ? {
+      ...session,
+      sub_activity_key: activity.id,
+      sub_activity_name: name,
+    } : session));
+    setError("");
   }
 
   function addSubActivitySession(activity: { id: string; name: string }) {
@@ -426,7 +436,9 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       sub_activity_name: subActivityMode ? String(session.sub_activity_name || "").trim() : null,
       sub_activity_key: subActivityMode ? String(session.sub_activity_key || "").trim() : null,
     }));
-    if (subActivityMode && normalizedSessions.some((item) => !item.sub_activity_name || !item.sub_activity_key)) { setError("子活動模式下，每個時段都必須連結至已建立的子活動"); setSaving(false); return; }
+    const existingSessionIds = new Set((event?.sessions || []).map((item) => item.id));
+    const newlyUnassignedSession = sessions.find((item) => !existingSessionIds.has(item.id) && (!String(item.sub_activity_name || "").trim() || !String(item.sub_activity_key || "").trim()));
+    if (subActivityMode && newlyUnassignedSession) { setError("新建立的時段必須先選擇所屬子活動；舊有未分配時段不會阻止儲存。 "); setSaving(false); return; }
     const invalidSession = normalizedSessions.find((item) => new Date(item.end_at).getTime() <= new Date(item.start_at).getTime());
     if (invalidSession) {
       setError(`${invalidSession.session_date} 有時段的結束時間必須遲於開始時間`);
@@ -612,6 +624,21 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       {isMulti && <section className="admin-form-section multi-session-builder">
         {subActivityMode ? <>
           <div className="section-heading"><div><h2>子活動及時段</h2><span>先建立子活動，再於每個子活動內新增日期、時段及人數。每個子活動可獨立管理及匯出參加者名單。</span></div><button type="button" className="button button-secondary button-small" onClick={addSubActivity}><Plus />新增子活動</button></div>
+          {(() => {
+            const validIds = new Set(subActivities.map((item) => item.id));
+            const unassigned = sessions.filter((item) => !String(item.sub_activity_key || "").trim() || !validIds.has(String(item.sub_activity_key || "")));
+            if (unassigned.length === 0) return null;
+            return <article className="multi-date-editor-card unassigned-session-card">
+              <header className="multi-date-editor-header"><div><Clock3 /><div><strong>未分配舊時段</strong><small>以下係舊有多時段資料。佢哋會原封不動保留，唔會阻止你儲存；你亦可以逐個分配到子活動。</small></div></div><strong>{unassigned.length} 個時段</strong></header>
+              <div className="date-session-editor-list">{unassigned.map((session, sessionIndex) => <section className="date-session-editor-row" key={session.id}>
+                <strong>舊時段 {sessionIndex + 1}</strong>
+                <div className="field"><span>日期</span><b>{session.session_date}</b></div>
+                <div className="field"><span>時間</span><b>{hongKongTime(session.start_at)}–{hongKongTime(session.end_at)}</b></div>
+                <div className="field"><span>名額</span><b>{session.capacity} 人</b></div>
+                <label className="field"><span>分配至子活動</span><select value="" onChange={(e)=>assignSessionToSubActivity(session.id,e.target.value)}><option value="">暫時保留未分配</option>{subActivities.filter((item)=>item.name.trim()).map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+              </section>)}</div>
+            </article>;
+          })()}
           <div className="multi-date-editor-list sub-activity-builder-list">
             {subActivities.map((activity, activityIndex) => {
               const activityName = activity.name.trim();

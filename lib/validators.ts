@@ -123,8 +123,11 @@ export const eventSchema = z
     message: "子活動模式只適用於多時段活動",
     path: ["sub_activity_mode"],
   })
-  .refine((data) => !data.sub_activity_mode || data.sessions.every((session) => Boolean(session.sub_activity_name?.trim()) && Boolean(session.sub_activity_key?.trim())), {
-    message: "子活動模式下每個時段都必須連結至有效子活動",
+  .refine((data) => !data.sub_activity_mode || data.sessions.every((session) => {
+    const linked = Boolean(session.sub_activity_name?.trim()) && Boolean(session.sub_activity_key?.trim());
+    return linked || Boolean(session.id);
+  }), {
+    message: "新建立的時段必須連結至子活動；舊有未分配時段可保留並稍後分配",
     path: ["sessions"],
   })
   .refine((data) => !data.sub_activity_mode || data.sub_activity_definitions.length > 0, {
@@ -135,8 +138,12 @@ export const eventSchema = z
     message: "子活動識別資料重複，請重新整理頁面後再試",
     path: ["sub_activity_definitions"],
   })
-  .refine((data) => !data.sub_activity_mode || data.sessions.every((session) => data.sub_activity_definitions.some((item) => item.id === session.sub_activity_key)), {
-    message: "部分時段未連結至現有子活動",
+  .refine((data) => !data.sub_activity_mode || data.sessions.every((session) => {
+    if (!session.sub_activity_key?.trim()) return Boolean(session.id);
+    const linkedToCurrentDefinition = data.sub_activity_definitions.some((item) => item.id === session.sub_activity_key);
+    return linkedToCurrentDefinition || Boolean(session.id);
+  }), {
+    message: "新建立的時段必須連結至現有子活動；舊有未分配時段可保留",
     path: ["sessions"],
   })
   .refine((data) => !data.is_multi_session || data.sessions.length > 0 || (data.sub_activity_mode && data.status === "draft"), {
