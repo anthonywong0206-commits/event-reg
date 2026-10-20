@@ -36,6 +36,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         capacity: session.capacity,
         sort_order: index,
         is_active: session.is_active,
+        sub_activity_name: session.sub_activity_name || null,
       }));
       const sessionResult = await admin.rpc("replace_event_sessions_safe", {
         p_event_id: id,

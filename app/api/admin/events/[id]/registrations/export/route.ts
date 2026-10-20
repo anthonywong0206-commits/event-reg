@@ -14,6 +14,7 @@ type ExportSession = {
   end_at: string;
   sort_order: number;
   is_active: boolean;
+  sub_activity_name?: string | null;
 };
 
 type ExportRegistration = {
@@ -234,7 +235,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     const [{ data: event, error: eventError }, { data: registrations, error: registrationError }] = await Promise.all([
       admin
         .from("events")
-        .select("title, slug, start_at, end_at, is_multi_session, custom_registration_fields, sessions:event_sessions(id,session_date,start_at,end_at,sort_order,is_active)")
+        .select("title, slug, start_at, end_at, is_multi_session, custom_registration_fields, sessions:event_sessions(id,session_date,start_at,end_at,sort_order,is_active,sub_activity_name)")
         .eq("id", id)
         .maybeSingle(),
       admin
@@ -296,7 +297,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
           (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime() || a.sort_order - b.sort_order,
         );
         const sessionGroups = sortedDaySessions.map((session) => ({
-          label: formatTimeRange(session.start_at, session.end_at),
+          label: `${session.sub_activity_name ? `${session.sub_activity_name} · ` : ""}${formatTimeRange(session.start_at, session.end_at)}`,
           registrations: confirmed.filter((registration) => registration.session_id === session.id),
         }));
 

@@ -21,7 +21,11 @@ const errorMessages: Record<string, string> = {
   SESSION_NOT_ACTIVE: "所選時段已停止報名。",
   SESSION_FULL: "所選時段名額已滿。",
   METHOD_NOT_ALLOWED: "此活動不支援所選報名方法。",
-  ALREADY_REGISTERED: "此電郵已登記此活動。如需更改資料，請聯絡主辦單位。",
+  ALREADY_REGISTERED: "此電郵已登記此活動／時段。如需更改資料，請聯絡主辦單位。",
+  TOO_MANY_SUB_ACTIVITIES: "所選子活動數目超過此活動設定上限。",
+  ONE_SESSION_PER_SUB_ACTIVITY: "同一子活動只可選擇一個時段。",
+  SESSION_TIME_CONFLICT: "所選子活動時段互相重疊，請重新選擇。",
+  SUB_ACTIVITY_NAME_REQUIRED: "部分時段未設定子活動名稱，請聯絡主辦單位。",
 };
 
 export async function POST(request: Request) {
@@ -91,7 +95,17 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data, error } = await admin.rpc("register_for_event", {
+    const rpcName = event.sub_activity_mode ? "register_for_event_bundle" : "register_for_event";
+    const rpcArgs = event.sub_activity_mode ? {
+      p_event_id: parsed.data.eventId,
+      p_session_ids: parsed.data.sessionIds,
+      p_full_name: parsed.data.fullName,
+      p_email: parsed.data.email?.toLowerCase() ?? null,
+      p_phone: parsed.data.phone,
+      p_method: parsed.data.method,
+      p_notes: parsed.data.notes || null,
+      p_custom_answers: customAnswers,
+    } : {
       p_event_id: parsed.data.eventId,
       p_session_id: parsed.data.sessionId ?? null,
       p_full_name: parsed.data.fullName,
@@ -100,39 +114,39 @@ export async function POST(request: Request) {
       p_method: parsed.data.method,
       p_notes: parsed.data.notes || null,
       p_custom_answers: customAnswers,
-    });
+    };
+    const { data, error } = await admin.rpc(rpcName, rpcArgs);
 
     if (error) {
       const known = Object.keys(errorMessages).find((code) => error.message.includes(code));
-      return NextResponse.json({ error: known ? errorMessages[known] : "未能完成報名，請稍後再試。" }, { status: (known === "EVENT_FULL" || known === "SESSION_FULL") || known === "REGISTRATION_NOT_STARTED" || known === "REGISTRATION_CLOSED" ? 409 : 400 });
+      return NextResponse.json({ error: known ? errorMessages[known] : "未能完成報名，請稍後再試。" }, { status: (known === "EVENT_FULL" || known === "SESSION_FULL" || known === "SESSION_TIME_CONFLICT" || known === "TOO_MANY_SUB_ACTIVITIES") || known === "REGISTRATION_NOT_STARTED" || known === "REGISTRATION_CLOSED" ? 409 : 400 });
     }
 
-    let registration = data as RegistrationRecord;
-    const { data: fullRegistration } = await admin
-      .from("registrations")
-      .select("*, session:event_sessions(*)")
-      .eq("id", registration.id)
-      .maybeSingle();
-    if (fullRegistration) registration = fullRegistration as RegistrationRecord;
-    registration.event = event;
-    const emailResult = registration.email && registration.status === "confirmed"
-      ? await sendRegistrationEmail(registration, event)
-      : { sent: false, skipped: true };
+    const created = event.sub_activity_mode
+      ? (((data as { registrations?: RegistrationRecord[] } | null)?.registrations) || [])
+      : [data as RegistrationRecord];
+    if (created.length === 0) return NextResponse.json({ error: "未能建立報名紀錄" }, { status: 500 });
 
-    await admin
-      .from("registrations")
-      .update({ email_sent: emailResult.sent, email_error: emailResult.error || null })
-      .eq("id", registration.id);
+    const completed: RegistrationRecord[] = [];
+    for (const base of created) {
+      let registration = base;
+      const { data: fullRegistration } = await admin.from("registrations").select("*, session:event_sessions(*)").eq("id", base.id).maybeSingle();
+      if (fullRegistration) registration = fullRegistration as RegistrationRecord;
+      registration.event = event;
+      const emailResult = registration.email && registration.status === "confirmed" ? await sendRegistrationEmail(registration, event) : { sent: false, skipped: true };
+      await admin.from("registrations").update({ email_sent: emailResult.sent, email_error: emailResult.error || null }).eq("id", registration.id);
+      await notifyNewRegistration(registration.id);
+      completed.push({ ...registration, email_sent: emailResult.sent });
+    }
 
-    // Telegram delivery is best-effort and must never make a successful registration fail.
-    await notifyNewRegistration(registration.id);
-
+    const primary = completed[0];
     return NextResponse.json({
-      id: registration.id,
-      registration_no: registration.registration_no,
-      qr_token: registration.qr_token,
-      email_sent: emailResult.sent,
-      status: registration.status,
+      id: primary.id,
+      registration_no: primary.registration_no,
+      qr_token: primary.qr_token,
+      email_sent: completed.some((item) => item.email_sent),
+      status: primary.status,
+      registration_count: completed.length,
     }, { status: 201 });
   } catch (error) {
     console.error(error);

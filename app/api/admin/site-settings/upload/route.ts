@@ -23,8 +23,8 @@ export async function POST(request: Request) {
     if (!allowedTypes.has(file.type)) {
       return NextResponse.json({ error: "只支援 JPG、PNG 或 WebP" }, { status: 415 });
     }
-    if (file.size > 8 * 1024 * 1024) {
-      return NextResponse.json({ error: "圖片不可大於 8MB" }, { status: 413 });
+    if (file.size > 4 * 1024 * 1024) {
+      return NextResponse.json({ error: "圖片不可大於 4MB" }, { status: 413 });
     }
 
     const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";

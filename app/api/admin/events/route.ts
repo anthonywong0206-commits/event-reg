@@ -43,6 +43,7 @@ export async function POST(request: Request) {
         capacity: session.capacity,
         sort_order: index,
         is_active: session.is_active,
+        sub_activity_name: session.sub_activity_name || null,
       })));
       if (sessionError) {
         await admin.from("events").delete().eq("id", data.id);
