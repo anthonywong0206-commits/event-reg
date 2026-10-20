@@ -17,7 +17,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (error) throw error;
     if (!eventData) return NextResponse.json({ error: "找不到活動" }, { status: 404 });
     const event = eventData as EventRecord;
-    if (event.is_multi_session) {
+    const isSubActivity = event.event_mode === "sub_activity" || event.sub_activity_mode;
+    if (isSubActivity) {
+      const { data: activities, error: activitiesError } = await admin.from("event_sub_activities").select("id,name,sort_order,is_active,sessions:event_sub_activity_sessions(*)").eq("event_id", id).order("sort_order");
+      if (activitiesError) throw activitiesError;
+      event.sub_activity_mode = true;
+      event.sessions = (activities || []).flatMap((activity) => (activity.sessions || []).map((session: EventSessionRecord) => ({ ...session, sub_activity_name: activity.name, sub_activity_key: activity.id }))) as EventSessionRecord[];
+    } else if (event.is_multi_session) {
       const { data: sessions, error: sessionsError } = await admin.from("event_sessions").select("*").eq("event_id", id).order("start_at");
       if (sessionsError) throw sessionsError;
       event.sessions = (sessions ?? []) as EventSessionRecord[];

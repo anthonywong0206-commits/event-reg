@@ -38,10 +38,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!eventData) return NextResponse.json({ error: "找不到活動" }, { status: 404 });
 
     const event = eventData as EventRecord;
-    if (event.is_multi_session) {
+    const isSubActivity = event.event_mode === "sub_activity" || event.sub_activity_mode;
+    const structuredMode = event.is_multi_session || isSubActivity;
+    let selectedSubActivityId: string | null = null;
+    if (structuredMode) {
       if (!parsed.data.sessionId) return NextResponse.json({ error: "請選擇活動日期及時段" }, { status: 400 });
-      const { data: selectedSession } = await admin.from("event_sessions").select("id,is_active").eq("id", parsed.data.sessionId).eq("event_id", eventId).maybeSingle();
-      if (!selectedSession || !selectedSession.is_active) return NextResponse.json({ error: "所選活動時段無效或已停止報名" }, { status: 400 });
+      if (isSubActivity) {
+        const { data: selectedSession } = await admin.from("event_sub_activity_sessions").select("id,is_active,sub_activity_id").eq("id", parsed.data.sessionId).eq("event_id", eventId).maybeSingle();
+        if (!selectedSession || !selectedSession.is_active) return NextResponse.json({ error: "所選子活動時段無效或已停止報名" }, { status: 400 });
+        selectedSubActivityId = selectedSession.sub_activity_id;
+      } else {
+        const { data: selectedSession } = await admin.from("event_sessions").select("id,is_active").eq("id", parsed.data.sessionId).eq("event_id", eventId).maybeSingle();
+        if (!selectedSession || !selectedSession.is_active) return NextResponse.json({ error: "所選活動時段無效或已停止報名" }, { status: 400 });
+      }
     }
     if (!event.registration_methods.includes(parsed.data.method)) {
       return NextResponse.json({ error: "此活動不支援所選報名方式" }, { status: 400 });
@@ -61,6 +70,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         .insert({
           event_id: eventId,
           session_id: event.is_multi_session ? parsed.data.sessionId : null,
+          sub_activity_id: isSubActivity ? selectedSubActivityId : null,
+          sub_activity_session_id: isSubActivity ? parsed.data.sessionId : null,
           registration_no: createRegistrationNumber(),
           full_name: parsed.data.fullName,
           email: parsed.data.email?.toLowerCase() ?? null,
@@ -93,6 +104,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (registration.session_id) {
         const { data: session } = await admin.from("event_sessions").select("*").eq("id", registration.session_id).maybeSingle();
         registration.session = session || null;
+      } else if (registration.sub_activity_session_id) {
+        const [{ data: session }, { data: activity }] = await Promise.all([
+          admin.from("event_sub_activity_sessions").select("*").eq("id", registration.sub_activity_session_id).maybeSingle(),
+          admin.from("event_sub_activities").select("*").eq("id", registration.sub_activity_id).maybeSingle(),
+        ]);
+        registration.sub_activity_session = session || null;
+        registration.sub_activity = activity || null;
+        if (session) registration.session = { ...session, sub_activity_name: activity?.name || null, sub_activity_key: activity?.id || null };
       }
       registration.event = event;
       const emailResult = await sendRegistrationEmail(registration, event);

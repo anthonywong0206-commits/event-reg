@@ -2,6 +2,7 @@ export type RegistrationMethod = "online" | "in_person";
 export type EventStatus = "draft" | "published" | "cancelled";
 export type RegistrationStatus = "confirmed" | "cancelled" | "waitlist";
 export type RegistrationVisibility = "public" | "private";
+export type EventMode = "single" | "multi_session" | "sub_activity" | "external";
 export type CustomRegistrationFieldType = "short_text" | "long_text" | "single_choice" | "multiple_choice" | "select";
 
 export interface CustomRegistrationField {
@@ -17,6 +18,32 @@ export type HeroButtonLinkType = "event" | "external";
 export interface SubActivityDefinition {
   id: string;
   name: string;
+}
+
+export interface SubActivitySessionRecord {
+  id: string;
+  event_id: string;
+  sub_activity_id: string;
+  session_date: string;
+  start_at: string;
+  end_at: string;
+  capacity: number;
+  confirmed_count: number;
+  sort_order: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SubActivityRecord {
+  id: string;
+  event_id: string;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+  sessions?: SubActivitySessionRecord[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface EventSessionRecord {
@@ -68,10 +95,12 @@ export interface EventRecord {
   email_required?: boolean;
   notes_required?: boolean;
   custom_registration_fields?: CustomRegistrationField[];
+  event_mode?: EventMode;
   is_multi_session: boolean;
   sub_activity_mode?: boolean;
   max_sub_activity_selections?: number;
   sub_activity_definitions?: SubActivityDefinition[];
+  sub_activities?: SubActivityRecord[];
   sessions?: EventSessionRecord[];
   created_at?: string;
   updated_at?: string;
@@ -81,8 +110,12 @@ export interface RegistrationRecord {
   id: string;
   event_id: string;
   session_id: string | null;
+  sub_activity_id?: string | null;
+  sub_activity_session_id?: string | null;
   registration_group_id?: string | null;
   session?: EventSessionRecord | null;
+  sub_activity?: SubActivityRecord | null;
+  sub_activity_session?: SubActivitySessionRecord | null;
   registration_no: string;
   full_name: string;
   email: string | null;

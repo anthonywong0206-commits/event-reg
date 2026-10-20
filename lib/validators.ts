@@ -56,6 +56,25 @@ const eventSessionSchema = z.object({
   sub_activity_key: z.string().trim().max(120).nullable().optional(),
 }).refine((data) => new Date(data.end_at) > new Date(data.start_at), { message: "時段結束時間必須遲於開始時間", path: ["end_at"] });
 
+
+const subActivitySessionSchema = z.object({
+  id: z.uuid(),
+  session_date: z.string().min(10),
+  start_at: z.iso.datetime(),
+  end_at: z.iso.datetime(),
+  capacity: z.coerce.number().int().min(1).max(100000),
+  sort_order: z.coerce.number().int().min(0).default(0),
+  is_active: z.boolean().default(true),
+}).refine((data) => new Date(data.end_at) > new Date(data.start_at), { message: "時段結束時間必須遲於開始時間", path: ["end_at"] });
+
+const subActivitySchema = z.object({
+  id: z.uuid(),
+  name: z.string().trim().min(1, "請輸入子活動名稱").max(160),
+  sort_order: z.coerce.number().int().min(0).default(0),
+  is_active: z.boolean().default(true),
+  sessions: z.array(subActivitySessionSchema).max(200).default([]),
+});
+
 const customRegistrationFieldSchema = z.object({
   id: z.string().trim().min(1).max(80),
   label: z.string().trim().min(1, "自訂欄目必須輸入標題").max(120),
@@ -105,10 +124,12 @@ export const eventSchema = z
     email_required: z.boolean().default(false),
     notes_required: z.boolean().default(false),
     custom_registration_fields: z.array(customRegistrationFieldSchema).max(30, "每個活動最多可建立 30 個自訂欄目").default([]),
+    event_mode: z.enum(["single", "multi_session", "sub_activity", "external"]).default("single"),
     is_multi_session: z.boolean().default(false),
     sub_activity_mode: z.boolean().default(false),
     max_sub_activity_selections: z.coerce.number().int().min(1).max(50).default(1),
     sub_activity_definitions: z.array(z.object({ id: z.string().trim().min(1).max(120), name: z.string().trim().min(1).max(160) })).max(50).default([]),
+    sub_activities: z.array(subActivitySchema).max(50).default([]),
     sessions: z.array(eventSessionSchema).optional().default([]),
   })
   .refine((data) => new Date(data.end_at) > new Date(data.start_at), {
@@ -119,36 +140,36 @@ export const eventSchema = z
     message: "開始報名時間必須早於或等於截止報名時間",
     path: ["registration_start_at"],
   })
-  .refine((data) => !data.sub_activity_mode || data.is_multi_session, {
-    message: "子活動模式需要使用時段資料結構",
-    path: ["sub_activity_mode"],
-  })
-  .refine((data) => !data.sub_activity_mode || data.sub_activity_definitions.length > 0, {
+  .refine((data) => data.event_mode !== "sub_activity" || data.sub_activities.length > 0, {
     message: "子活動模式最少需要建立一個子活動",
-    path: ["sub_activity_definitions"],
+    path: ["sub_activities"],
   })
-  .refine((data) => !data.sub_activity_mode || new Set(data.sub_activity_definitions.map((item) => item.id)).size === data.sub_activity_definitions.length, {
+  .refine((data) => data.event_mode !== "sub_activity" || new Set(data.sub_activities.map((item) => item.id)).size === data.sub_activities.length, {
     message: "子活動識別資料重複，請重新整理頁面後再試",
-    path: ["sub_activity_definitions"],
+    path: ["sub_activities"],
   })
-  .refine((data) => !data.sub_activity_mode || data.sessions.every((session) => {
-    const key = session.sub_activity_key?.trim();
-    const name = session.sub_activity_name?.trim();
-    return Boolean(key && name && data.sub_activity_definitions.some((item) => item.id === key));
-  }), {
-    message: "子活動時段必須連結至已建立的子活動",
-    path: ["sessions"],
+  .refine((data) => data.event_mode !== "sub_activity" || new Set(data.sub_activities.map((item) => item.name.toLowerCase())).size === data.sub_activities.length, {
+    message: "子活動名稱不可重複",
+    path: ["sub_activities"],
   })
-  .refine((data) => data.sub_activity_mode || !data.is_multi_session || data.sessions.length > 0, {
+  .refine((data) => data.event_mode !== "multi_session" || data.sessions.length > 0, {
     message: "多時段活動最少需要一個日期及時段",
     path: ["sessions"],
   })
-  .refine((data) => data.is_multi_session || new Date(data.registration_deadline) <= new Date(data.start_at), {
+  .refine((data) => data.event_mode !== "single" || new Date(data.registration_deadline) <= new Date(data.start_at), {
     message: "截止報名時間必須早於或等於活動開始時間",
     path: ["registration_deadline"],
   })
-  .refine((data) => !data.is_multi_session || data.sessions.every((session) => new Date(data.registration_deadline) <= new Date(session.start_at)), {
+  .refine((data) => data.event_mode !== "multi_session" || data.sessions.every((session) => new Date(data.registration_deadline) <= new Date(session.start_at)), {
     message: "截止報名時間必須早於所有活動時段",
+    path: ["registration_deadline"],
+  })
+  .refine((data) => data.event_mode !== "sub_activity" || data.status === "draft" || data.sub_activities.some((item) => item.sessions.length > 0), {
+    message: "公開子活動模式最少需要一個可報名時段",
+    path: ["sub_activities"],
+  })
+  .refine((data) => data.event_mode !== "sub_activity" || data.sub_activities.flatMap((item) => item.sessions).every((session) => new Date(data.registration_deadline) <= new Date(session.start_at)), {
+    message: "截止報名時間必須早於所有子活動時段",
     path: ["registration_deadline"],
   })
   .superRefine((data, context) => {

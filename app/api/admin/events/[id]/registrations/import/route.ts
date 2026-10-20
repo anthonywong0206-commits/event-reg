@@ -29,7 +29,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (eventError) throw eventError;
     if (!eventData) return NextResponse.json({ error: "找不到活動" }, { status: 404 });
     const event = eventData as EventRecord;
-    if (event.is_multi_session) {
+    const isSubActivity = event.event_mode === "sub_activity" || event.sub_activity_mode;
+    if (isSubActivity) {
+      const { data: activities, error: activitiesError } = await admin.from("event_sub_activities").select("id,name,sort_order,is_active,sessions:event_sub_activity_sessions(*)").eq("event_id", eventId).order("sort_order");
+      if (activitiesError) throw activitiesError;
+      event.sub_activity_mode = true;
+      event.sessions = (activities || []).flatMap((activity) => (activity.sessions || []).map((session: EventSessionRecord) => ({ ...session, sub_activity_name: activity.name, sub_activity_key: activity.id }))) as EventSessionRecord[];
+    } else if (event.is_multi_session) {
       const { data: sessions, error: sessionsError } = await admin.from("event_sessions").select("*").eq("event_id", eventId).order("start_at");
       if (sessionsError) throw sessionsError;
       event.sessions = (sessions ?? []) as EventSessionRecord[];
@@ -49,9 +55,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       let registration: RegistrationRecord | null = null;
       let lastError: { code?: string | null; message?: string | null; constraint?: string | null } | null = null;
       for (let attempt = 0; attempt < 2 && !registration; attempt += 1) {
+        const selectedSyntheticSession = isSubActivity ? event.sessions?.find((session) => session.id === row.sessionId) : null;
         const { data, error } = await admin.from("registrations").insert({
           event_id: eventId,
           session_id: event.is_multi_session ? row.sessionId : null,
+          sub_activity_id: isSubActivity ? (selectedSyntheticSession?.sub_activity_key || null) : null,
+          sub_activity_session_id: isSubActivity ? row.sessionId : null,
           registration_no: createRegistrationNumber(),
           full_name: row.fullName,
           email: row.email?.toLowerCase() ?? null,
@@ -74,7 +83,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
 
       if (row.sendEmail && row.email && row.status === "confirmed") {
-        registration.session = event.sessions?.find((session) => session.id === registration?.session_id) || null;
+        registration.session = event.sessions?.find((session) => session.id === (registration?.sub_activity_session_id || registration?.session_id)) || null;
         registration.event = event;
         const emailResult = await sendRegistrationEmail(registration, event);
         delete registration.event;

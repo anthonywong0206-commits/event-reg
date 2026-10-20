@@ -26,6 +26,7 @@ const errorMessages: Record<string, string> = {
   ONE_SESSION_PER_SUB_ACTIVITY: "同一子活動只可選擇一個時段。",
   SESSION_TIME_CONFLICT: "所選子活動時段互相重疊，請重新選擇。",
   SUB_ACTIVITY_NAME_REQUIRED: "部分時段未設定子活動名稱，請聯絡主辦單位。",
+  SUB_ACTIVITY_MODE_REQUIRED: "此活動並非子活動報名模式。",
 };
 
 export async function POST(request: Request) {
@@ -95,8 +96,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const rpcName = event.sub_activity_mode ? "register_for_event_bundle" : "register_for_event";
-    const rpcArgs = event.sub_activity_mode ? {
+    const isSubActivity = event.event_mode === "sub_activity" || event.sub_activity_mode;
+    const rpcName = isSubActivity ? "register_for_sub_activity_bundle_v2" : "register_for_event";
+    const rpcArgs = isSubActivity ? {
       p_event_id: parsed.data.eventId,
       p_session_ids: parsed.data.sessionIds,
       p_full_name: parsed.data.fullName,
@@ -122,7 +124,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: known ? errorMessages[known] : "未能完成報名，請稍後再試。" }, { status: (known === "EVENT_FULL" || known === "SESSION_FULL" || known === "SESSION_TIME_CONFLICT" || known === "TOO_MANY_SUB_ACTIVITIES") || known === "REGISTRATION_NOT_STARTED" || known === "REGISTRATION_CLOSED" ? 409 : 400 });
     }
 
-    const created = event.sub_activity_mode
+    const created = isSubActivity
       ? (((data as { registrations?: RegistrationRecord[] } | null)?.registrations) || [])
       : [data as RegistrationRecord];
     if (created.length === 0) return NextResponse.json({ error: "未能建立報名紀錄" }, { status: 500 });
@@ -130,8 +132,27 @@ export async function POST(request: Request) {
     const completed: RegistrationRecord[] = [];
     for (const base of created) {
       let registration = base;
-      const { data: fullRegistration } = await admin.from("registrations").select("*, session:event_sessions(*)").eq("id", base.id).maybeSingle();
-      if (fullRegistration) registration = fullRegistration as RegistrationRecord;
+      const { data: fullRegistration } = await admin.from("registrations")
+        .select("*, session:event_sessions(*), sub_activity:event_sub_activities(*), sub_activity_session:event_sub_activity_sessions(*)")
+        .eq("id", base.id).maybeSingle();
+      if (fullRegistration) {
+        registration = fullRegistration as RegistrationRecord;
+        if (!registration.session && registration.sub_activity_session) {
+          registration.session = {
+            id: registration.sub_activity_session.id,
+            event_id: registration.sub_activity_session.event_id,
+            session_date: registration.sub_activity_session.session_date,
+            start_at: registration.sub_activity_session.start_at,
+            end_at: registration.sub_activity_session.end_at,
+            capacity: registration.sub_activity_session.capacity,
+            confirmed_count: registration.sub_activity_session.confirmed_count,
+            sort_order: registration.sub_activity_session.sort_order,
+            is_active: registration.sub_activity_session.is_active,
+            sub_activity_name: registration.sub_activity?.name || null,
+            sub_activity_key: registration.sub_activity?.id || registration.sub_activity_id || null,
+          };
+        }
+      }
       registration.event = event;
       const emailResult = registration.email && registration.status === "confirmed" ? await sendRegistrationEmail(registration, event) : { sent: false, skipped: true };
       await admin.from("registrations").update({ email_sent: emailResult.sent, email_error: emailResult.error || null }).eq("id", registration.id);

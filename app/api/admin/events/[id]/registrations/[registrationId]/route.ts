@@ -38,10 +38,19 @@ export async function PUT(
     if (!existing) return NextResponse.json({ error: "找不到參加者紀錄" }, { status: 404 });
 
     const event = eventData as EventRecord;
-    if (event.is_multi_session) {
+    const isSubActivity = event.event_mode === "sub_activity" || event.sub_activity_mode;
+    const structuredMode = event.is_multi_session || isSubActivity;
+    let selectedSubActivityId: string | null = null;
+    if (structuredMode) {
       if (!parsed.data.sessionId) return NextResponse.json({ error: "請選擇活動日期及時段" }, { status: 400 });
-      const { data: selectedSession } = await admin.from("event_sessions").select("id,is_active").eq("id", parsed.data.sessionId).eq("event_id", eventId).maybeSingle();
-      if (!selectedSession || !selectedSession.is_active) return NextResponse.json({ error: "所選活動時段無效或已停止報名" }, { status: 400 });
+      if (isSubActivity) {
+        const { data: selectedSession } = await admin.from("event_sub_activity_sessions").select("id,is_active,sub_activity_id").eq("id", parsed.data.sessionId).eq("event_id", eventId).maybeSingle();
+        if (!selectedSession || !selectedSession.is_active) return NextResponse.json({ error: "所選子活動時段無效或已停止報名" }, { status: 400 });
+        selectedSubActivityId = selectedSession.sub_activity_id;
+      } else {
+        const { data: selectedSession } = await admin.from("event_sessions").select("id,is_active").eq("id", parsed.data.sessionId).eq("event_id", eventId).maybeSingle();
+        if (!selectedSession || !selectedSession.is_active) return NextResponse.json({ error: "所選活動時段無效或已停止報名" }, { status: 400 });
+      }
     }
     const current = existing as RegistrationRecord;
     if (!event.registration_methods.includes(parsed.data.method) && parsed.data.method !== current.method) {
@@ -56,6 +65,8 @@ export async function PUT(
       .from("registrations")
       .update({
         session_id: event.is_multi_session ? parsed.data.sessionId : null,
+        sub_activity_id: isSubActivity ? selectedSubActivityId : null,
+        sub_activity_session_id: isSubActivity ? parsed.data.sessionId : null,
         full_name: parsed.data.fullName,
         email: parsed.data.email?.toLowerCase() ?? null,
         phone: parsed.data.phone,

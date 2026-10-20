@@ -43,7 +43,7 @@ function formatSingleTime(event: EventRecord) {
 }
 
 function getEventDateLabel(event: EventRecord) {
-  if (!event.is_multi_session || !event.sessions?.length) return formatSingleDate(event);
+  if (!(event.is_multi_session || event.sub_activity_mode) || !event.sessions?.length) return formatSingleDate(event);
   const uniqueDates = [...new Set(event.sessions.filter((item) => item.is_active).map((item) => item.session_date))].sort();
   if (uniqueDates.length <= 1) {
     const [onlyDate] = uniqueDates;
@@ -55,7 +55,7 @@ function getEventDateLabel(event: EventRecord) {
 }
 
 function getEventTimeLabel(event: EventRecord) {
-  if (!event.is_multi_session || !event.sessions?.length) return formatSingleTime(event);
+  if (!(event.is_multi_session || event.sub_activity_mode) || !event.sessions?.length) return formatSingleTime(event);
   return "多個時段可選";
 }
 
@@ -70,6 +70,9 @@ function getEventStatus(event: EventRecord, kind: GroupKind) {
 
   if (event.external_registration) return { text: "外部連結報名", tone: "external" };
 
+  if (event.sub_activity_mode) {
+    return { text: `${event.sub_activities?.length || 0} 個子活動｜${event.sessions?.length || 0} 個時段`, tone: "multi" };
+  }
   if (event.is_multi_session) {
     return {
       text: `多日期活動｜報名狀況：${capacitySignal(event).label}`,

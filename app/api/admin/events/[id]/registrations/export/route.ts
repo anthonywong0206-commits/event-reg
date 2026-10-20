@@ -20,6 +20,7 @@ type ExportSession = {
 type ExportRegistration = {
   id: string;
   session_id: string | null;
+  sub_activity_session_id?: string | null;
   full_name: string;
   phone: string;
   notes: string | null;
@@ -236,12 +237,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const [{ data: event, error: eventError }, { data: registrations, error: registrationError }] = await Promise.all([
       admin
         .from("events")
-        .select("title, slug, start_at, end_at, is_multi_session, sub_activity_mode, custom_registration_fields, sessions:event_sessions(id,session_date,start_at,end_at,sort_order,is_active,sub_activity_name)")
+        .select("title, slug, start_at, end_at, event_mode, is_multi_session, sub_activity_mode, custom_registration_fields, sessions:event_sessions(id,session_date,start_at,end_at,sort_order,is_active,sub_activity_name), sub_activities:event_sub_activities(id,name,sort_order,is_active,sessions:event_sub_activity_sessions(id,session_date,start_at,end_at,sort_order,is_active))")
         .eq("id", id)
         .maybeSingle(),
       admin
         .from("registrations")
-        .select("id, session_id, full_name, phone, notes, status, created_at, custom_answers")
+        .select("id, session_id, sub_activity_session_id, full_name, phone, notes, status, created_at, custom_answers")
         .eq("event_id", id)
         .eq("status", "confirmed")
         .order("created_at", { ascending: true }),
@@ -250,7 +251,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (eventError || !event) return NextResponse.json({ error: "找不到活動" }, { status: 404 });
     if (registrationError) throw registrationError;
 
-    let confirmed = ((registrations ?? []) as ExportRegistration[]).sort(
+    const isSubActivity = event.event_mode === "sub_activity" || event.sub_activity_mode;
+    let confirmed = ((registrations ?? []) as ExportRegistration[]).map((item) => isSubActivity ? { ...item, session_id: item.sub_activity_session_id || null } : item).sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
     const customFields = Array.isArray(event.custom_registration_fields)
@@ -260,7 +262,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       : [];
     const workbook = XLSX.utils.book_new();
 
-    if (!event.is_multi_session) {
+    if (!event.is_multi_session && !isSubActivity) {
       const dateKey = hkIsoDateFormatter.format(new Date(event.start_at));
       const ws = buildSheet({
         eventTitle: event.title,
@@ -271,7 +273,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       });
       XLSX.utils.book_append_sheet(workbook, ws, safeSheetName(dateKey, "參加者名單"));
     } else {
-      const allSessions = ((event.sessions ?? []) as ExportSession[]).sort((a, b) => {
+      const allSessions = (isSubActivity
+        ? ((event.sub_activities ?? []) as Array<{ id:string; name:string; sort_order:number; sessions?: ExportSession[] }>).flatMap((activity) =>
+            (activity.sessions || []).map((session) => ({ ...session, sub_activity_name: activity.name })))
+        : ((event.sessions ?? []) as ExportSession[])).sort((a, b) => {
         const dateCompare = a.session_date.localeCompare(b.session_date);
         if (dateCompare !== 0) return dateCompare;
         const timeCompare = new Date(a.start_at).getTime() - new Date(b.start_at).getTime();

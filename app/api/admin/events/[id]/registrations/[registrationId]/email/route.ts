@@ -22,13 +22,18 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("registrations")
-      .select("*, event:events(*), session:event_sessions(*)")
+      .select("*, event:events(*), session:event_sessions(*), sub_activity:event_sub_activities(*), sub_activity_session:event_sub_activity_sessions(*)")
       .eq("id", registrationId)
       .eq("event_id", eventId)
       .maybeSingle();
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "找不到參加者" }, { status: 404 });
     const registration = data as RegistrationRecord;
+    if (!registration.session && registration.sub_activity_session) {
+      const child = registration.sub_activity;
+      const slot = registration.sub_activity_session;
+      registration.session = { ...slot, event_id: eventId, sub_activity_name: child?.name || null, sub_activity_key: child?.id || null } as RegistrationRecord["session"];
+    }
     if (!registration.email) return NextResponse.json({ error: "參加者未有提供電郵地址" }, { status: 400 });
     if (registration.status !== "confirmed") return NextResponse.json({ error: "只可向已確認參加者發送確認電郵" }, { status: 400 });
     const event = registration.event as EventRecord;

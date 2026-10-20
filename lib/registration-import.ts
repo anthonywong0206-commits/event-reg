@@ -5,6 +5,7 @@ export const IMPORT_HEADERS = [
   "姓名*",
   "電話*",
   "電郵（選填）",
+  "子活動",
   "活動日期",
   "開始時間",
   "狀態",
@@ -77,9 +78,10 @@ function methodValue(value: unknown, event: EventRecord): RegistrationMethod | n
   return null;
 }
 
-function sessionKey(session: EventSessionRecord): string {
+function sessionKey(session: EventSessionRecord, event: EventRecord): string {
   const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Hong_Kong", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(session.start_at));
-  return `${session.session_date}|${time}`;
+  const prefix = event.sub_activity_mode ? `${String(session.sub_activity_name || "").trim()}|` : "";
+  return `${prefix}${session.session_date}|${time}`;
 }
 
 export function parseRegistrationWorkbook(buffer: ArrayBuffer, event: EventRecord): { rows: ImportRow[]; errors: string[] } {
@@ -87,7 +89,7 @@ export function parseRegistrationWorkbook(buffer: ArrayBuffer, event: EventRecor
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!sheet) return { rows: [], errors: ["Excel 沒有可讀取的工作表。"] };
   const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: true });
-  const sessionMap = new Map((event.sessions ?? []).map((session) => [sessionKey(session), session]));
+  const sessionMap = new Map((event.sessions ?? []).map((session) => [sessionKey(session, event), session]));
   const rows: ImportRow[] = [];
   const errors: string[] = [];
 
@@ -113,17 +115,21 @@ export function parseRegistrationWorkbook(buffer: ArrayBuffer, event: EventRecor
     if (attended && status !== "confirmed") errors.push(`第 ${rowNumber} 行：只有已確認參加者可以標示為已出席。`);
     if (sendEmail && !email) errors.push(`第 ${rowNumber} 行：如要發送確認電郵，必須填寫電郵。`);
 
-    if (event.is_multi_session) {
+    const structuredMode = event.is_multi_session || Boolean(event.sub_activity_mode);
+    if (structuredMode) {
+      const subActivityName = event.sub_activity_mode ? cellText(raw["子活動"]) : "";
       const date = normalizeDate(raw["活動日期"]);
       const time = normalizeTime(raw["開始時間"]);
-      const session = sessionMap.get(`${date}|${time}`);
-      if (!date || !time) errors.push(`第 ${rowNumber} 行：多時段活動必須填寫活動日期及開始時間。`);
-      else if (!session) errors.push(`第 ${rowNumber} 行：找不到 ${date} ${time} 的活動時段。請使用範本「可選時段」工作表中的資料。`);
+      const key = `${event.sub_activity_mode ? `${subActivityName}|` : ""}${date}|${time}`;
+      const session = sessionMap.get(key);
+      if (event.sub_activity_mode && !subActivityName) errors.push(`第 ${rowNumber} 行：子活動模式必須填寫子活動名稱。`);
+      if (!date || !time) errors.push(`第 ${rowNumber} 行：時段活動必須填寫活動日期及開始時間。`);
+      else if (!session) errors.push(`第 ${rowNumber} 行：找不到 ${event.sub_activity_mode ? `${subActivityName} ` : ""}${date} ${time} 的活動時段。請使用範本「可選時段」工作表中的資料。`);
       else if (!session.is_active) errors.push(`第 ${rowNumber} 行：所選時段已停止報名。`);
       else sessionId = session.id;
     }
 
-    if (fullName.length >= 2 && phone.length >= 8 && (!email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) && status && method && (!event.is_multi_session || sessionId) && !(attended && status !== "confirmed") && !(sendEmail && !email)) {
+    if (fullName.length >= 2 && phone.length >= 8 && (!email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) && status && method && (!(event.is_multi_session || event.sub_activity_mode) || sessionId) && !(attended && status !== "confirmed") && !(sendEmail && !email)) {
       rows.push({ rowNumber, fullName, phone, email, sessionId, status, method, notes, attended, sendEmail });
     }
   });
@@ -138,11 +144,13 @@ export function createRegistrationTemplate(event: EventRecord): Buffer {
   const sampleTime = event.sessions?.[0]
     ? new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Hong_Kong", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(event.sessions[0].start_at))
     : "10:00";
+  const structuredMode = event.is_multi_session || Boolean(event.sub_activity_mode);
+  const sampleSubActivity = event.sub_activity_mode ? String(event.sessions?.[0]?.sub_activity_name || "") : "";
   const participantSheet = XLSX.utils.aoa_to_sheet([
     [...IMPORT_HEADERS],
-    ["陳大文", "91234567", "example@email.com", event.is_multi_session ? sampleDate : "", event.is_multi_session ? sampleTime : "", "已確認", event.registration_methods.includes("online") ? "網上" : "親身", "範例資料，可刪除", "否", "否"],
+    ["陳大文", "91234567", "example@email.com", sampleSubActivity, structuredMode ? sampleDate : "", structuredMode ? sampleTime : "", "已確認", event.registration_methods.includes("online") ? "網上" : "親身", "範例資料，可刪除", "否", "否"],
   ]);
-  participantSheet["!cols"] = [{ wch: 18 }, { wch: 16 }, { wch: 28 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 32 }, { wch: 12 }, { wch: 18 }];
+  participantSheet["!cols"] = [{ wch: 18 }, { wch: 16 }, { wch: 28 }, { wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 32 }, { wch: 12 }, { wch: 18 }];
   participantSheet["!freeze"] = { xSplit: 0, ySplit: 1 };
   XLSX.utils.book_append_sheet(workbook, participantSheet, "參加者匯入");
 
@@ -151,7 +159,8 @@ export function createRegistrationTemplate(event: EventRecord): Buffer {
     ["姓名*", "必填，最少 2 個字。"],
     ["電話*", "必填，最少 8 個字元。"],
     ["電郵（選填）", "選填；如選擇發送確認電郵則必須填寫。"],
-    ["活動日期／開始時間", event.is_multi_session ? "必填，必須完全對應「可選時段」工作表。" : "單時段活動可留空。"],
+    ["子活動", event.sub_activity_mode ? "必填，必須完全對應「可選時段」工作表。" : "非子活動模式可留空。"],
+    ["活動日期／開始時間", structuredMode ? "必填，必須完全對應「可選時段」工作表。" : "單時段活動可留空。"],
     ["狀態", "已確認／候補／已取消；留空預設為已確認。"],
     ["報名方式", `可填：${event.registration_methods.map((method) => method === "online" ? "網上" : "親身").join("、")}；留空使用活動首個方式。`],
     ["已出席", "是／否；只有已確認參加者可填是。"],
@@ -162,16 +171,16 @@ export function createRegistrationTemplate(event: EventRecord): Buffer {
   instructionSheet["!cols"] = [{ wch: 24 }, { wch: 76 }];
   XLSX.utils.book_append_sheet(workbook, instructionSheet, "填寫說明");
 
-  if (event.is_multi_session) {
+  if (structuredMode) {
     const sessions = [...(event.sessions ?? [])].sort((a, b) => a.start_at.localeCompare(b.start_at));
-    const rows = [["活動日期", "開始時間", "結束時間", "時段名額", "現時剩餘名額", "狀態"]];
+    const rows = [["子活動", "活動日期", "開始時間", "結束時間", "時段名額", "現時剩餘名額", "狀態"]];
     for (const session of sessions) {
       const start = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Hong_Kong", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(session.start_at));
       const end = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Hong_Kong", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(session.end_at));
-      rows.push([session.session_date, start, end, String(session.capacity), String(Math.max(0, session.capacity - session.confirmed_count)), session.is_active ? "開放" : "暫停"]);
+      rows.push([event.sub_activity_mode ? String(session.sub_activity_name || "") : "", session.session_date, start, end, String(session.capacity), String(Math.max(0, session.capacity - session.confirmed_count)), session.is_active ? "開放" : "暫停"]);
     }
     const sessionSheet = XLSX.utils.aoa_to_sheet(rows);
-    sessionSheet["!cols"] = [{ wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 12 }];
+    sessionSheet["!cols"] = [{ wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(workbook, sessionSheet, "可選時段");
   }
   return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
