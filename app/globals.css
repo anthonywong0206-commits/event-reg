@@ -1116,16 +1116,3 @@ html[data-mobile-layout="true"] .mobile-home-top-tabs { display: grid; }
 /* Sub-activity mode */
 .sub-activity-mode-settings{display:grid;gap:12px;padding:14px;border:1px solid #d8e4f2;border-radius:14px;background:#f8fbff}.sub-activity-mode-settings>.checkbox-field{margin:0}.sub-activity-name-field{min-width:220px}.sub-activity-selection-summary{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:12px 14px;margin-bottom:14px;border-radius:14px;background:#eef6ff;border:1px solid #cfe0f4}.sub-activity-selection-summary strong{color:var(--blue)}.sub-activity-selection-summary span{font-size:.86rem;color:var(--muted);text-align:right}.sub-activity-public-list{display:grid;gap:14px}.sub-activity-public-card{border:1px solid var(--line);border-radius:16px;padding:14px;background:#fff}.sub-activity-public-card.selected{border-color:#8ab8ef;box-shadow:0 0 0 2px rgba(31,111,235,.08)}.sub-activity-public-card>header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}.sub-activity-public-card>header>strong{font-size:1rem}.sub-activity-public-card>header>small{color:var(--muted)}.sub-activity-session-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.sub-activity-session-option{display:flex;gap:10px;align-items:flex-start;padding:11px;border:1px solid #dbe5f0;border-radius:12px;cursor:pointer;background:#fbfdff}.sub-activity-session-option.selected{border-color:var(--blue);background:#f1f7ff}.sub-activity-session-option input{margin-top:4px}.sub-activity-session-option>span{display:grid;gap:2px}.sub-activity-session-option b{font-size:.78rem;color:#64748b}.sub-activity-session-option strong{font-size:.92rem}.sub-activity-session-option small{font-size:.78rem;color:var(--muted)}
 @media(max-width:760px){.sub-activity-selection-summary{display:grid}.sub-activity-selection-summary span{text-align:left}.sub-activity-session-options{grid-template-columns:1fr}.sub-activity-public-card>header{align-items:flex-start;flex-direction:column;gap:4px}}
-
-/* Sub-activity builder / participant lists */
-.sub-activity-builder-list { display: grid; gap: 18px; }
-.sub-activity-builder-card { border-width: 2px; }
-.sub-activity-title-field { min-width: min(420px, 70vw); margin: 0; }
-.admin-sub-activity-registration-list { display: grid; gap: 28px; }
-.admin-sub-activity-registration-section { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--border, #d9e2ec); border-radius: 18px; background: var(--surface, #fff); }
-.sub-activity-list-heading { margin: 0; }
-.sub-activity-list-heading h3 { margin: 0; font-size: 1.2rem; }
-@media (max-width: 860px) {
-  .sub-activity-title-field { min-width: 0; width: 100%; }
-  .admin-sub-activity-registration-section { padding: 14px; }
-}
