@@ -120,15 +120,8 @@ export const eventSchema = z
     path: ["registration_start_at"],
   })
   .refine((data) => !data.sub_activity_mode || data.is_multi_session, {
-    message: "子活動模式只適用於多時段活動",
+    message: "子活動模式需要使用時段資料結構",
     path: ["sub_activity_mode"],
-  })
-  .refine((data) => !data.sub_activity_mode || data.sessions.every((session) => {
-    const linked = Boolean(session.sub_activity_name?.trim()) && Boolean(session.sub_activity_key?.trim());
-    return linked || Boolean(session.id);
-  }), {
-    message: "新建立的時段必須連結至子活動；舊有未分配時段可保留並稍後分配",
-    path: ["sessions"],
   })
   .refine((data) => !data.sub_activity_mode || data.sub_activity_definitions.length > 0, {
     message: "子活動模式最少需要建立一個子活動",
@@ -139,15 +132,15 @@ export const eventSchema = z
     path: ["sub_activity_definitions"],
   })
   .refine((data) => !data.sub_activity_mode || data.sessions.every((session) => {
-    if (!session.sub_activity_key?.trim()) return Boolean(session.id);
-    const linkedToCurrentDefinition = data.sub_activity_definitions.some((item) => item.id === session.sub_activity_key);
-    return linkedToCurrentDefinition || Boolean(session.id);
+    const key = session.sub_activity_key?.trim();
+    const name = session.sub_activity_name?.trim();
+    return Boolean(key && name && data.sub_activity_definitions.some((item) => item.id === key));
   }), {
-    message: "新建立的時段必須連結至現有子活動；舊有未分配時段可保留",
+    message: "子活動時段必須連結至已建立的子活動",
     path: ["sessions"],
   })
-  .refine((data) => !data.is_multi_session || data.sessions.length > 0 || (data.sub_activity_mode && data.status === "draft"), {
-    message: "公開／取消的多時段活動最少需要一個日期及時段；子活動可先以草稿保存，再新增時段",
+  .refine((data) => data.sub_activity_mode || !data.is_multi_session || data.sessions.length > 0, {
+    message: "多時段活動最少需要一個日期及時段",
     path: ["sessions"],
   })
   .refine((data) => data.is_multi_session || new Date(data.registration_deadline) <= new Date(data.start_at), {

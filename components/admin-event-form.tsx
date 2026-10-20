@@ -79,13 +79,14 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
     start_at: hongKongSessionIso(item.session_date, hongKongTime(item.start_at)),
     end_at: hongKongSessionIso(item.session_date, hongKongTime(item.end_at)),
   })) : isMulti ? [defaultSession()] : []);
-  const totalSessionCapacity = useMemo(() => sessions.reduce((sum, item) => sum + Number(item.capacity || 0), 0), [sessions]);
   const [registrationStartMode, setRegistrationStartMode] = useState<"immediate" | "scheduled">(
     event && new Date(event.registration_start_at).getTime() > Date.now() ? "scheduled" : "immediate",
   );
   const [registrationVisibility, setRegistrationVisibility] = useState<"public" | "private">(event?.registration_visibility === "private" ? "private" : "public");
   const [externalRegistration, setExternalRegistration] = useState(Boolean(event?.external_registration));
   const [subActivityMode, setSubActivityMode] = useState(Boolean(event?.sub_activity_mode));
+  const activeModeSessions = useMemo(() => sessions.filter((item) => subActivityMode ? Boolean(String(item.sub_activity_key || "").trim()) : !String(item.sub_activity_key || "").trim()), [sessions, subActivityMode]);
+  const totalSessionCapacity = useMemo(() => activeModeSessions.reduce((sum, item) => sum + Number(item.capacity || 0), 0), [activeModeSessions]);
   const [maxSubActivitySelections, setMaxSubActivitySelections] = useState(Number(event?.max_sub_activity_selections || 1));
   const [inviteCode, setInviteCode] = useState("");
   const [emailRequired, setEmailRequired] = useState(Boolean(event?.email_required));
@@ -112,7 +113,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
     setInviteCode(Array.from(bytes, (value) => alphabet[value % alphabet.length]).join(""));
   }
 
-  const sessionDates = useMemo(() => [...new Set(sessions.map((item) => item.session_date))].sort(), [sessions]);
+  const sessionDates = useMemo(() => [...new Set(sessions.filter((item) => !String(item.sub_activity_key || "").trim()).map((item) => item.session_date))].sort(), [sessions]);
 
   function addDate() {
     const next = defaultSession();
@@ -129,7 +130,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   }
 
   function addSessionForDate(sessionDate: string) {
-    const sameDate = sessions.filter((item) => item.session_date === sessionDate).sort((a,b)=>a.start_at.localeCompare(b.start_at));
+    const sameDate = sessions.filter((item) => !String(item.sub_activity_key || "").trim() && item.session_date === sessionDate).sort((a,b)=>a.start_at.localeCompare(b.start_at));
     const previous = sameDate.at(-1);
     const startTime = previous ? hongKongTime(previous.end_at) : "10:00";
     const startMinutes = timeToMinutes(startTime);
@@ -143,7 +144,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
 
   function updateDate(oldDate: string, newDate: string) {
     setSessions((current) => current.map((item) => {
-      if (item.session_date !== oldDate) return item;
+      if (String(item.sub_activity_key || "").trim() || item.session_date !== oldDate) return item;
       return {
         ...item,
         session_date: newDate,
@@ -161,7 +162,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
 
   function removeDate(sessionDate: string) {
     if (sessionDates.length === 1) return;
-    setSessions((current) => current.filter((item) => item.session_date !== sessionDate));
+    setSessions((current) => current.filter((item) => String(item.sub_activity_key || "").trim() || item.session_date !== sessionDate));
   }
 
   function updateSession(index: number, patch: Partial<SessionDraft>) {
@@ -189,8 +190,8 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
         if (legacy.size) setSubActivities([...legacy.entries()].map(([id, name]) => ({ id, name })));
         else setSubActivities([{ id: crypto.randomUUID(), name: "" }]);
       }
-    } else if (sessions.length === 0) {
-      setSessions([defaultSession()]);
+    } else if (!sessions.some((item) => !String(item.sub_activity_key || "").trim())) {
+      setSessions((current) => [...current, defaultSession()]);
     }
   }
 
@@ -229,11 +230,8 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       const endTime = minutesToTime(Math.min(startMinutes + 60, 23 * 60 + 59));
       next.start_at = hongKongSessionIso(next.session_date, startTime);
       next.end_at = hongKongSessionIso(next.session_date, endTime);
-    } else if (sessionDates.length) {
-      next.session_date = sessionDates[0];
-      next.start_at = hongKongSessionIso(next.session_date, "10:00");
-      next.end_at = hongKongSessionIso(next.session_date, "11:00");
     }
+
     next.sub_activity_name = name;
     next.sub_activity_key = activity.id;
     setSessions((current) => [...current, { ...next, sort_order: current.length }]);
@@ -419,13 +417,19 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
     setError("");
     const form = new FormData(formEvent.currentTarget);
     const value = (name: string) => String(form.get(name) || "").trim();
-    if (isMulti && sessions.length === 0 && !(subActivityMode && value("status") === "draft")) { setError("公開／取消的多時段活動最少需要建立一個活動時段；如想先保存子活動名稱，請先以草稿儲存。 "); setSaving(false); return; }
+    const validSubActivityIds = new Set(subActivities.map((item) => item.id));
+    const modeSessions = isMulti
+      ? sessions.filter((session) => subActivityMode
+          ? Boolean(String(session.sub_activity_key || "").trim()) && validSubActivityIds.has(String(session.sub_activity_key || "").trim())
+          : !String(session.sub_activity_key || "").trim())
+      : [];
+    if (isMulti && !subActivityMode && modeSessions.length === 0) { setError("多時段模式最少需要建立一個活動時段。"); setSaving(false); return; }
     if (isMulti && subActivityMode) {
       const names = subActivities.map((item) => item.name.trim());
       if (names.length === 0 || names.some((name) => !name)) { setError("請為每個子活動輸入名稱"); setSaving(false); return; }
       if (new Set(names.map((name) => name.toLowerCase())).size !== names.length) { setError("子活動名稱不可重複"); setSaving(false); return; }
     }
-    const normalizedSessions = sessions.map((session, index) => ({
+    const normalizedSessions = modeSessions.map((session, index) => ({
       ...(event?.sessions?.some((item) => item.id === session.id) ? { id: session.id } : {}),
       session_date: session.session_date,
       start_at: hongKongSessionIso(session.session_date, hongKongTime(session.start_at)),
@@ -436,9 +440,6 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       sub_activity_name: subActivityMode ? String(session.sub_activity_name || "").trim() : null,
       sub_activity_key: subActivityMode ? String(session.sub_activity_key || "").trim() : null,
     }));
-    const existingSessionIds = new Set((event?.sessions || []).map((item) => item.id));
-    const newlyUnassignedSession = sessions.find((item) => !existingSessionIds.has(item.id) && (!String(item.sub_activity_name || "").trim() || !String(item.sub_activity_key || "").trim()));
-    if (subActivityMode && newlyUnassignedSession) { setError("新建立的時段必須先選擇所屬子活動；舊有未分配時段不會阻止儲存。 "); setSaving(false); return; }
     const invalidSession = normalizedSessions.find((item) => new Date(item.end_at).getTime() <= new Date(item.start_at).getTime());
     if (invalidSession) {
       setError(`${invalidSession.session_date} 有時段的結束時間必須遲於開始時間`);
@@ -497,8 +498,8 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       custom_registration_fields: customFields.map((field) => ({ ...field, label: field.label.trim(), options: (field.options || []).map((option) => option.trim()).filter(Boolean) })),
       is_multi_session: isMulti,
       sub_activity_mode: isMulti && subActivityMode,
-      max_sub_activity_selections: isMulti && subActivityMode ? maxSubActivitySelections : 1,
-      sub_activity_definitions: isMulti && subActivityMode ? subActivities.map((item) => ({ id: item.id, name: item.name.trim() })) : [],
+      max_sub_activity_selections: isMulti && subActivityMode ? maxSubActivitySelections : Number(event?.max_sub_activity_selections || 1),
+      sub_activity_definitions: isMulti && subActivityMode ? subActivities.map((item) => ({ id: item.id, name: item.name.trim() })) : (event?.sub_activity_definitions || []),
       sessions: normalizedSessions,
     };
 
@@ -611,7 +612,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
           <label className="field"><span>截止報名時間 *</span><input name="registration_deadline" type="datetime-local" required defaultValue={localInput(event?.registration_deadline)} /></label>
           {!isMulti && <label className="field"><span>人數上限 *</span><input name="capacity" type="number" min={Math.max(1, event?.confirmed_count || 0)} required defaultValue={event?.capacity || 50} /><small>{event ? `目前已確認 ${event.confirmed_count} 人；可增加名額，最低不可少於 ${event.confirmed_count} 人。` : "設定活動可接受的正選人數。"}</small></label>}
           {isMulti && <div className="field field-full sub-activity-mode-settings">
-            <label className="checkbox-field"><input type="checkbox" checked={subActivityMode} onChange={(e)=>changeSubActivityMode(e.target.checked)} /><span><strong>啟用「子活動」模式</strong><small>先建立子活動，再為各子活動新增日期、時段及名額；參加者可一次選擇多個子活動。</small></span></label>
+            <label className="checkbox-field"><input type="checkbox" checked={subActivityMode} onChange={(e)=>changeSubActivityMode(e.target.checked)} /><span><strong>啟用「子活動」模式</strong><small>啟用後會使用獨立的子活動及時段資料，不受普通多時段設定影響；先建立子活動，再為各子活動新增日期、時段及名額。</small></span></label>
             {subActivityMode && <label className="field"><span>每人最多可報名子活動數目 *</span><input type="number" min={1} max={50} value={maxSubActivitySelections} onChange={(e)=>setMaxSubActivitySelections(Math.max(1,Math.min(50,Number(e.target.value)||1)))} /><small>系統會阻止同一報名內時間互相重疊的子活動。</small></label>}
           </div>}
           {isMulti && <div className="field"><span>全部時段總名額</span><strong className="session-capacity-total">{totalSessionCapacity} 人</strong></div>}
@@ -659,7 +660,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
                       <label className="field"><span>結束時間 *</span><input type="time" value={hongKongTime(session.end_at)} onChange={(e)=>updateSession(index,{end_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label>
                       <label className="field"><span>人數上限 *</span><input type="number" min={Math.max(1,session.confirmed_count||0)} value={session.capacity} onChange={(e)=>updateSession(index,{capacity:Number(e.target.value)})} required /><small>{event?`已確認 ${session.confirmed_count||0} 人；可增加名額。`:"此時段正選名額"}</small></label>
                       <label className="field checkbox-field"><input type="checkbox" checked={session.is_active} onChange={(e)=>updateSession(index,{is_active:e.target.checked})} /><span>開放</span></label>
-                      <button type="button" className="icon-button danger" onClick={()=>removeSession(index)} disabled={activitySessions.length===1}><Trash2 /></button>
+                      <button type="button" className="icon-button danger" onClick={()=>removeSession(index)} disabled={Number(session.confirmed_count||0)>0}><Trash2 /></button>
                     </section>;
                   })}
                 </div>}
@@ -670,12 +671,12 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
           <div className="section-heading"><div><h2>活動日期及時段</h2><span>可手動新增時段，或按開始時間、結束時間及節數間隔批量產生時段</span></div><button type="button" className="button button-secondary button-small" onClick={addDate}><CalendarPlus />新增日期</button></div>
           <div className="multi-date-editor-list">
             {sessionDates.map((sessionDate, dateIndex) => {
-              const dateSessions = sessions.filter((item) => item.session_date === sessionDate).sort((a,b)=>a.start_at.localeCompare(b.start_at));
+              const dateSessions = sessions.filter((item) => !String(item.sub_activity_key || "").trim() && item.session_date === sessionDate).sort((a,b)=>a.start_at.localeCompare(b.start_at));
               const dateCapacity = dateSessions.reduce((sum,item)=>sum+Number(item.capacity||0),0);
               return <article className="multi-date-editor-card" key={sessionDate}>
                 <header className="multi-date-editor-header"><div><CalendarDays /><label><span>活動日期 {dateIndex + 1}</span><input type="date" value={sessionDate} onChange={(e)=>updateDate(sessionDate,e.target.value)} required /></label><strong>當日總名額 {dateCapacity} 人</strong></div><div><button type="button" className="button button-secondary button-small" onClick={()=>addSessionForDate(sessionDate)}><Plus />新增時段</button><button type="button" className="icon-button danger" onClick={()=>removeDate(sessionDate)} disabled={sessionDates.length===1}><Trash2 /></button></div></header>
                 {(() => { const generator=getIntervalGenerator(sessionDate,dateSessions); const savedBlocks=inferIntervalBlocks(dateSessions); const duration=Math.max(0,timeToMinutes(generator.endTime)-timeToMinutes(generator.startTime)); const slotCount=generator.intervalMinutes>0&&duration>0&&duration%generator.intervalMinutes===0?duration/generator.intervalMinutes:0; return <div className="interval-session-generator"><div className="interval-session-generator-heading"><div><Clock3 /><span><strong>按節數間隔快速產生時段</strong><small>同一日可重複使用不同設定，例如 12:00–14:00 每 15 分鐘，再設定 14:00–16:00 每 30 分鐘。</small></span></div>{slotCount>0&&<b>將產生 {slotCount} 節</b>}</div>{event&&savedBlocks.length>0&&<div className="saved-interval-blocks"><strong>目前已儲存的節數設定</strong><div>{savedBlocks.map((block,blockIndex)=><button type="button" key={`${block.startTime}-${block.endTime}-${blockIndex}`} className="saved-interval-block" onClick={()=>updateIntervalGenerator(sessionDate,dateSessions,{startTime:block.startTime,endTime:block.endTime,intervalMinutes:block.intervalMinutes,capacity:block.capacity})}><span>{block.startTime}–{block.endTime}</span><small>每 {block.intervalMinutes} 分鐘 · {block.slotCount} 節 · 每節 {block.capacity} 人</small></button>)}</div><small>點擊任何一組即可載入到下方修改。</small></div>}<div className="interval-session-generator-grid"><label className="field"><span>開始時間</span><input type="time" value={generator.startTime} onChange={(e)=>updateIntervalGenerator(sessionDate,dateSessions,{startTime:e.target.value})}/></label><label className="field"><span>結束時間</span><input type="time" value={generator.endTime} onChange={(e)=>updateIntervalGenerator(sessionDate,dateSessions,{endTime:e.target.value})}/></label><label className="field"><span>節數間隔（分鐘）</span><input type="number" min={1} max={720} step={1} value={generator.intervalMinutes} onChange={(e)=>updateIntervalGenerator(sessionDate,dateSessions,{intervalMinutes:Number(e.target.value)})}/></label><label className="field"><span>每節名額</span><input type="number" min={1} max={100000} step={1} value={generator.capacity} onChange={(e)=>updateIntervalGenerator(sessionDate,dateSessions,{capacity:Number(e.target.value)})}/></label><button type="button" className="button button-primary interval-generate-button" onClick={()=>generateIntervalSessions(sessionDate,dateSessions)}><Plus />產生時段</button></div></div>; })()}
-                <div className="date-session-editor-list">{dateSessions.map((session,sessionIndex)=>{const index=sessions.findIndex((item)=>item.id===session.id);return <section className="date-session-editor-row" key={session.id}><strong>時段 {sessionIndex+1}</strong><label className="field"><span>開始時間 *</span><input type="time" value={hongKongTime(session.start_at)} onChange={(e)=>updateSession(index,{start_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label><label className="field"><span>結束時間 *</span><input type="time" value={hongKongTime(session.end_at)} onChange={(e)=>updateSession(index,{end_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label><label className="field"><span>人數上限 *</span><input type="number" min={Math.max(1,session.confirmed_count||0)} value={session.capacity} onChange={(e)=>updateSession(index,{capacity:Number(e.target.value)})} required /></label><label className="field checkbox-field"><input type="checkbox" checked={session.is_active} onChange={(e)=>updateSession(index,{is_active:e.target.checked})}/><span>開放</span></label><button type="button" className="icon-button danger" onClick={()=>removeSession(index)} disabled={sessions.length===1||dateSessions.length===1}><Trash2 /></button></section>})}</div>
+                <div className="date-session-editor-list">{dateSessions.map((session,sessionIndex)=>{const index=sessions.findIndex((item)=>item.id===session.id);return <section className="date-session-editor-row" key={session.id}><strong>時段 {sessionIndex+1}</strong><label className="field"><span>開始時間 *</span><input type="time" value={hongKongTime(session.start_at)} onChange={(e)=>updateSession(index,{start_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label><label className="field"><span>結束時間 *</span><input type="time" value={hongKongTime(session.end_at)} onChange={(e)=>updateSession(index,{end_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label><label className="field"><span>人數上限 *</span><input type="number" min={Math.max(1,session.confirmed_count||0)} value={session.capacity} onChange={(e)=>updateSession(index,{capacity:Number(e.target.value)})} required /></label><label className="field checkbox-field"><input type="checkbox" checked={session.is_active} onChange={(e)=>updateSession(index,{is_active:e.target.checked})}/><span>開放</span></label><button type="button" className="icon-button danger" onClick={()=>removeSession(index)} disabled={activeModeSessions.length===1||dateSessions.length===1}><Trash2 /></button></section>})}</div>
               </article>;
             })}
           </div>
