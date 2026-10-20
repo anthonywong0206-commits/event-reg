@@ -24,6 +24,7 @@ export interface EventSessionRecord {
   confirmed_count: number;
   sort_order: number;
   is_active: boolean;
+  sub_activity_name?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -62,6 +63,8 @@ export interface EventRecord {
   notes_required?: boolean;
   custom_registration_fields?: CustomRegistrationField[];
   is_multi_session: boolean;
+  sub_activity_mode?: boolean;
+  max_sub_activity_selections?: number;
   sessions?: EventSessionRecord[];
   created_at?: string;
   updated_at?: string;
@@ -71,6 +74,7 @@ export interface RegistrationRecord {
   id: string;
   event_id: string;
   session_id: string | null;
+  registration_group_id?: string | null;
   session?: EventSessionRecord | null;
   registration_no: string;
   full_name: string;

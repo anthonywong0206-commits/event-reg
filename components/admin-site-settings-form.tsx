@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2, ImageUp, LoaderCircle, Save } from "lucide-react";
 import type { EventRecord, HeroButtonLinkType, HeroButtonPosition, SiteSettingsRecord } from "@/lib/types";
+import { prepareImageForUpload, readJsonResponse } from "@/lib/client-image-upload";
 
 export function AdminSiteSettingsForm({ settings, events }: { settings: SiteSettingsRecord; events: EventRecord[] }) {
   const router = useRouter();
@@ -25,13 +26,14 @@ export function AdminSiteSettingsForm({ settings, events }: { settings: SiteSett
     setUploading(true);
     setError("");
     setSuccess("");
-    const body = new FormData();
-    body.append("file", file);
-
     try {
+      const preparedFile = await prepareImageForUpload(file);
+      const body = new FormData();
+      body.append("file", preparedFile);
       const response = await fetch("/api/admin/site-settings/upload", { method: "POST", body });
-      const result = await response.json();
+      const result = await readJsonResponse<{ url?: string; error?: string }>(response);
       if (!response.ok) throw new Error(result.error || "橫額圖片上載失敗");
+      if (!result.url) throw new Error("圖片上載完成但未取得圖片網址");
       setImageUrl(result.url);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "橫額圖片上載失敗");

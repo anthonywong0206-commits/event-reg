@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CalendarDays, CalendarPlus, Clock3, ImageUp, KeyRound, LoaderCircle, Plus, RefreshCw, Save, Trash2, Zap } from "lucide-react";
 import type { CustomRegistrationField, CustomRegistrationFieldType, EventRecord, EventSessionRecord, RegistrationMethod } from "@/lib/types";
+import { prepareImageForUpload, readJsonResponse } from "@/lib/client-image-upload";
 
 function localInput(value?: string | null) {
   if (!value) return "";
@@ -28,7 +29,7 @@ function hongKongSessionIso(sessionDate: string, time: string) {
   return new Date(`${sessionDate}T${time}:00+08:00`).toISOString();
 }
 
-type SessionDraft = Pick<EventSessionRecord, "id" | "session_date" | "start_at" | "end_at" | "capacity" | "confirmed_count" | "sort_order" | "is_active">;
+type SessionDraft = Pick<EventSessionRecord, "id" | "session_date" | "start_at" | "end_at" | "capacity" | "confirmed_count" | "sort_order" | "is_active" | "sub_activity_name">;
 
 type IntervalGeneratorDraft = {
   startTime: string;
@@ -61,7 +62,7 @@ function defaultSession(): SessionDraft {
   const date = new Date();
   date.setDate(date.getDate() + 14);
   const sessionDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Hong_Kong", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
-  return { id: crypto.randomUUID(), session_date: sessionDate, start_at: hongKongSessionIso(sessionDate, "10:00"), end_at: hongKongSessionIso(sessionDate, "12:00"), capacity: 20, confirmed_count: 0, sort_order: 0, is_active: true };
+  return { id: crypto.randomUUID(), session_date: sessionDate, start_at: hongKongSessionIso(sessionDate, "10:00"), end_at: hongKongSessionIso(sessionDate, "12:00"), capacity: 20, confirmed_count: 0, sort_order: 0, is_active: true, sub_activity_name: "" };
 }
 
 export function AdminEventForm({ event, forceMulti = false }: { event?: EventRecord | null; forceMulti?: boolean }) {
@@ -84,6 +85,8 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   );
   const [registrationVisibility, setRegistrationVisibility] = useState<"public" | "private">(event?.registration_visibility === "private" ? "private" : "public");
   const [externalRegistration, setExternalRegistration] = useState(Boolean(event?.external_registration));
+  const [subActivityMode, setSubActivityMode] = useState(Boolean(event?.sub_activity_mode));
+  const [maxSubActivitySelections, setMaxSubActivitySelections] = useState(Number(event?.max_sub_activity_selections || 1));
   const [inviteCode, setInviteCode] = useState("");
   const [emailRequired, setEmailRequired] = useState(Boolean(event?.email_required));
   const [notesRequired, setNotesRequired] = useState(Boolean(event?.notes_required));
@@ -302,12 +305,14 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
   async function upload(file: File, target: "poster" | "hero") {
     setUploading(true);
     setError("");
-    const body = new FormData();
-    body.append("file", file);
     try {
+      const preparedFile = await prepareImageForUpload(file);
+      const body = new FormData();
+      body.append("file", preparedFile);
       const response = await fetch("/api/admin/upload", { method: "POST", body });
-      const result = await response.json();
+      const result = await readJsonResponse<{ url?: string; error?: string }>(response);
       if (!response.ok) throw new Error(result.error || "圖片上載失敗");
+      if (!result.url) throw new Error("圖片上載完成但未取得圖片網址");
       if (target === "poster") setPosterUrl(result.url);
       else setHeroUrl(result.url);
     } catch (caught) {
@@ -332,7 +337,9 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       capacity: Number(session.capacity),
       sort_order: index,
       is_active: session.is_active,
+      sub_activity_name: subActivityMode ? String(session.sub_activity_name || "").trim() : null,
     }));
+    if (subActivityMode && normalizedSessions.some((item) => !item.sub_activity_name)) { setError("子活動模式下，每個時段都必須輸入子活動名稱"); setSaving(false); return; }
     const invalidSession = normalizedSessions.find((item) => new Date(item.end_at).getTime() <= new Date(item.start_at).getTime());
     if (invalidSession) {
       setError(`${invalidSession.session_date} 有時段的結束時間必須遲於開始時間`);
@@ -388,6 +395,8 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       notes_required: notesRequired,
       custom_registration_fields: customFields.map((field) => ({ ...field, label: field.label.trim(), options: (field.options || []).map((option) => option.trim()).filter(Boolean) })),
       is_multi_session: isMulti,
+      sub_activity_mode: isMulti && subActivityMode,
+      max_sub_activity_selections: isMulti && subActivityMode ? maxSubActivitySelections : 1,
       sessions: normalizedSessions,
     };
 
@@ -499,6 +508,10 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
           <label className="field"><span>指定開始報名時間</span><input name="registration_start_at" type="datetime-local" required={registrationStartMode === "scheduled"} disabled={registrationStartMode === "immediate"} defaultValue={localInput(event?.registration_start_at)} /></label>
           <label className="field"><span>截止報名時間 *</span><input name="registration_deadline" type="datetime-local" required defaultValue={localInput(event?.registration_deadline)} /></label>
           {!isMulti && <label className="field"><span>人數上限 *</span><input name="capacity" type="number" min={Math.max(1, event?.confirmed_count || 0)} required defaultValue={event?.capacity || 50} /><small>{event ? `目前已確認 ${event.confirmed_count} 人；可增加名額，最低不可少於 ${event.confirmed_count} 人。` : "設定活動可接受的正選人數。"}</small></label>}
+          {isMulti && <div className="field field-full sub-activity-mode-settings">
+            <label className="checkbox-field"><input type="checkbox" checked={subActivityMode} onChange={(e)=>setSubActivityMode(e.target.checked)} /><span><strong>啟用「子活動」模式</strong><small>讓參加者在同一主活動內一次選擇多個子活動，並為每個子活動選擇一個時段。</small></span></label>
+            {subActivityMode && <label className="field"><span>每人最多可報名子活動數目 *</span><input type="number" min={1} max={50} value={maxSubActivitySelections} onChange={(e)=>setMaxSubActivitySelections(Math.max(1,Math.min(50,Number(e.target.value)||1)))} /><small>系統會阻止同一報名內時間互相重疊的子活動。</small></label>}
+          </div>}
           {isMulti && <div className="field"><span>全部時段總名額</span><strong className="session-capacity-total">{totalSessionCapacity} 人</strong></div>}
           <label className="field checkbox-field field-full waitlist-setting-field"><input type="checkbox" name="accepts_waitlist" defaultChecked={Boolean(event?.accepts_waitlist)} /><span><strong>正選滿額後接受候補登記</strong><small>可隨時開啟或關閉。開啟後，正選滿額時前台只顯示「現只接受候補」，不會顯示候補人數；關閉後滿額即停止報名。</small></span></label>
           <label className="field"><span>活動地點 *</span><input name="location" required defaultValue={event?.location} /></label>
@@ -507,7 +520,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
       </section>
 
       {isMulti && <section className="admin-form-section multi-session-builder">
-        <div className="section-heading"><div><h2>活動日期及時段</h2><span>可手動新增時段，或按開始時間、結束時間及節數間隔批量產生時段</span></div><button type="button" className="button button-secondary button-small" onClick={addDate}><CalendarPlus />新增日期</button></div>
+        <div className="section-heading"><div><h2>{subActivityMode ? "子活動、日期及時段" : "活動日期及時段"}</h2><span>{subActivityMode ? "為每個時段設定子活動名稱；相同名稱可設多個可選時段。" : "可手動新增時段，或按開始時間、結束時間及節數間隔批量產生時段"}</span></div><button type="button" className="button button-secondary button-small" onClick={addDate}><CalendarPlus />新增日期</button></div>
         <div className="multi-date-editor-list">
           {sessionDates.map((sessionDate, dateIndex) => {
             const dateSessions = sessions.filter((item) => item.session_date === sessionDate).sort((a,b)=>a.start_at.localeCompare(b.start_at));
@@ -557,6 +570,7 @@ export function AdminEventForm({ event, forceMulti = false }: { event?: EventRec
                   const index = sessions.findIndex((item)=>item.id===session.id);
                   return <section className="date-session-editor-row" key={session.id}>
                     <strong>時段 {sessionIndex + 1}</strong>
+                    {subActivityMode && <label className="field sub-activity-name-field"><span>子活動名稱 *</span><input value={session.sub_activity_name || ""} onChange={(e)=>updateSession(index,{sub_activity_name:e.target.value})} placeholder="例如：禪繞畫工作坊" required /></label>}
                     <label className="field"><span>開始時間 *</span><input type="time" value={hongKongTime(session.start_at)} onChange={(e) => updateSession(index,{start_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label>
                     <label className="field"><span>結束時間 *</span><input type="time" value={hongKongTime(session.end_at)} onChange={(e) => updateSession(index,{end_at:hongKongSessionIso(session.session_date,e.target.value)})} required /></label>
                     <label className="field"><span>人數上限 *</span><input type="number" min={Math.max(1, session.confirmed_count || 0)} value={session.capacity} onChange={(e) => updateSession(index,{capacity:Number(e.target.value)})} required /><small>{event ? `已確認 ${session.confirmed_count || 0} 人；可增加名額。` : "此時段正選名額"}</small></label>

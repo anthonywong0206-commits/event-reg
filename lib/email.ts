@@ -14,7 +14,7 @@ function escapeHtml(value: string): string {
 }
 
 function sessionLabel(registration: RegistrationRecord, event: EventRecord): string {
-  if (registration.session) return `${formatDateTime(registration.session.start_at)}–${new Intl.DateTimeFormat("zh-HK", { timeZone: "Asia/Hong_Kong", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(registration.session.end_at))}`;
+  if (registration.session) { const time = `${formatDateTime(registration.session.start_at)}–${new Intl.DateTimeFormat("zh-HK", { timeZone: "Asia/Hong_Kong", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(registration.session.end_at))}`; return registration.session.sub_activity_name ? `${registration.session.sub_activity_name}｜${time}` : time; }
   return formatEventDate(event);
 }
 

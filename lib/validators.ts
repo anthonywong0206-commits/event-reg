@@ -33,6 +33,7 @@ const optionalUrlSchema = z.preprocess(
 export const registrationSchema = z.object({
   eventId: z.uuid("活動資料無效"),
   sessionId: z.uuid("請選擇有效活動時段").nullable().optional(),
+  sessionIds: z.array(z.uuid("請選擇有效活動時段")).max(50).optional().default([]),
   fullName: z.string().trim().min(2, "請輸入姓名").max(80),
   email: optionalEmailSchema,
   phone: z.string().trim().min(8, "請輸入聯絡電話").max(30),
@@ -51,6 +52,7 @@ const eventSessionSchema = z.object({
   capacity: z.coerce.number().int().min(1).max(100000),
   sort_order: z.coerce.number().int().min(0).default(0),
   is_active: z.boolean().default(true),
+  sub_activity_name: z.string().trim().max(160).nullable().optional(),
 }).refine((data) => new Date(data.end_at) > new Date(data.start_at), { message: "時段結束時間必須遲於開始時間", path: ["end_at"] });
 
 const customRegistrationFieldSchema = z.object({
@@ -103,6 +105,8 @@ export const eventSchema = z
     notes_required: z.boolean().default(false),
     custom_registration_fields: z.array(customRegistrationFieldSchema).max(30, "每個活動最多可建立 30 個自訂欄目").default([]),
     is_multi_session: z.boolean().default(false),
+    sub_activity_mode: z.boolean().default(false),
+    max_sub_activity_selections: z.coerce.number().int().min(1).max(50).default(1),
     sessions: z.array(eventSessionSchema).optional().default([]),
   })
   .refine((data) => new Date(data.end_at) > new Date(data.start_at), {
@@ -112,6 +116,14 @@ export const eventSchema = z
   .refine((data) => new Date(data.registration_start_at) <= new Date(data.registration_deadline), {
     message: "開始報名時間必須早於或等於截止報名時間",
     path: ["registration_start_at"],
+  })
+  .refine((data) => !data.sub_activity_mode || data.is_multi_session, {
+    message: "子活動模式只適用於多時段活動",
+    path: ["sub_activity_mode"],
+  })
+  .refine((data) => !data.sub_activity_mode || data.sessions.every((session) => Boolean(session.sub_activity_name?.trim())), {
+    message: "子活動模式下每個時段都必須設定子活動名稱",
+    path: ["sessions"],
   })
   .refine((data) => !data.is_multi_session || data.sessions.length > 0, {
     message: "多時段活動最少需要一個日期及時段",
@@ -172,6 +184,7 @@ const adminRegistrationFields = {
   notes: z.string().trim().max(500).optional().default(""),
   attended: z.boolean().optional().default(false),
   sessionId: z.uuid("請選擇有效活動時段").nullable().optional(),
+  sessionIds: z.array(z.uuid("請選擇有效活動時段")).max(50).optional().default([]),
 };
 
 export const adminRegistrationCreateSchema = z
