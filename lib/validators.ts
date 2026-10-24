@@ -72,6 +72,7 @@ const subActivitySchema = z.object({
   name: z.string().trim().min(1, "請輸入子活動名稱").max(160),
   sort_order: z.coerce.number().int().min(0).default(0),
   is_active: z.boolean().default(true),
+  overlap_exempt: z.boolean().default(false),
   sessions: z.array(subActivitySessionSchema).max(200).default([]),
 });
 

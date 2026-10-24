@@ -20,6 +20,7 @@ type ExportSession = {
 type ExportRegistration = {
   id: string;
   session_id: string | null;
+  sub_activity_id?: string | null;
   sub_activity_session_id?: string | null;
   full_name: string;
   phone: string;
@@ -232,7 +233,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const { id } = await params;
-    const subActivity = new URL(request.url).searchParams.get("subActivity")?.trim() || null;
+    const searchParams = new URL(request.url).searchParams;
+    const subActivityId = searchParams.get("subActivityId")?.trim() || null;
+    const legacySubActivityName = searchParams.get("subActivity")?.trim() || null;
     const admin = createAdminClient();
     const [{ data: event, error: eventError }, { data: registrations, error: registrationError }] = await Promise.all([
       admin
@@ -242,7 +245,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         .maybeSingle(),
       admin
         .from("registrations")
-        .select("id, session_id, sub_activity_session_id, full_name, phone, notes, status, created_at, custom_answers")
+        .select("id, session_id, sub_activity_id, sub_activity_session_id, full_name, phone, notes, status, created_at, custom_answers")
         .eq("event_id", id)
         .eq("status", "confirmed")
         .order("created_at", { ascending: true }),
@@ -273,21 +276,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       });
       XLSX.utils.book_append_sheet(workbook, ws, safeSheetName(dateKey, "參加者名單"));
     } else {
+      const subActivityRows = (event.sub_activities ?? []) as Array<{ id:string; name:string; sort_order:number; sessions?: ExportSession[] }>;
+      const selectedActivity = isSubActivity && (subActivityId || legacySubActivityName)
+        ? subActivityRows.find((activity) => subActivityId ? activity.id === subActivityId : activity.name === legacySubActivityName)
+        : null;
+      if ((subActivityId || legacySubActivityName) && !selectedActivity) return NextResponse.json({ error: "找不到指定子活動" }, { status: 404 });
       const allSessions = (isSubActivity
-        ? ((event.sub_activities ?? []) as Array<{ id:string; name:string; sort_order:number; sessions?: ExportSession[] }>).flatMap((activity) =>
-            (activity.sessions || []).map((session) => ({ ...session, sub_activity_name: activity.name })))
+        ? subActivityRows.flatMap((activity) => (activity.sessions || []).map((session) => ({ ...session, sub_activity_name: activity.name })))
         : ((event.sessions ?? []) as ExportSession[])).sort((a, b) => {
         const dateCompare = a.session_date.localeCompare(b.session_date);
         if (dateCompare !== 0) return dateCompare;
         const timeCompare = new Date(a.start_at).getTime() - new Date(b.start_at).getTime();
         return timeCompare !== 0 ? timeCompare : a.sort_order - b.sort_order;
       });
-      const sessions = subActivity
-        ? allSessions.filter((session) => String(session.sub_activity_name || "").trim() === subActivity)
+      const sessions = selectedActivity
+        ? allSessions.filter((session) => (selectedActivity.sessions || []).some((item) => item.id === session.id))
         : allSessions;
-      if (subActivity && sessions.length === 0) return NextResponse.json({ error: "找不到指定子活動" }, { status: 404 });
       const selectedSessionIds = new Set(sessions.map((session) => session.id));
-      if (subActivity) confirmed = confirmed.filter((registration) => Boolean(registration.session_id && selectedSessionIds.has(registration.session_id)));
+      if (selectedActivity) confirmed = confirmed.filter((registration) => registration.sub_activity_id === selectedActivity.id || Boolean(registration.session_id && selectedSessionIds.has(registration.session_id)));
       const sessionById = new Map(sessions.map((session) => [session.id, session]));
       const dates = new Map<string, ExportSession[]>();
       for (const session of sessions) {
@@ -309,7 +315,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime() || a.sort_order - b.sort_order,
         );
         const sessionGroups = sortedDaySessions.map((session) => ({
-          label: subActivity ? formatTimeRange(session.start_at, session.end_at) : `${session.sub_activity_name ? `${session.sub_activity_name} · ` : ""}${formatTimeRange(session.start_at, session.end_at)}`,
+          label: selectedActivity ? formatTimeRange(session.start_at, session.end_at) : `${session.sub_activity_name ? `${session.sub_activity_name} · ` : ""}${formatTimeRange(session.start_at, session.end_at)}`,
           registrations: confirmed.filter((registration) => registration.session_id === session.id),
         }));
 
@@ -329,7 +335,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           0,
         );
         const ws = buildSheet({
-          eventTitle: subActivity ? `${event.title}－${subActivity}` : event.title,
+          eventTitle: selectedActivity ? `${event.title}－${selectedActivity.name}` : event.title,
           dateLabel: formatDate(dateValue),
           overallTimeLabel,
           sessionGroups: groupsForSheet,
@@ -347,7 +353,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       compression: true,
       cellStyles: true,
     } as XLSX.WritingOptions) as Buffer;
-    const safeSubActivity = subActivity ? `-${subActivity.replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "")}` : "";
+    const selectedActivityName = isSubActivity && (subActivityId || legacySubActivityName)
+      ? ((event.sub_activities ?? []) as Array<{ id:string; name:string }>).find((activity) => subActivityId ? activity.id === subActivityId : activity.name === legacySubActivityName)?.name || ""
+      : "";
+    const safeSubActivity = selectedActivityName ? `-${selectedActivityName.replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "")}` : "";
     const filename = `${event.slug}${safeSubActivity}-participant-list.xlsx`;
 
     return new NextResponse(new Uint8Array(output), {

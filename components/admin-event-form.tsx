@@ -104,11 +104,11 @@ export function AdminEventForm({ event, forceMulti = false, forceMode }: { event
   const [notesRequired, setNotesRequired] = useState(Boolean(event?.notes_required));
   const [customFields, setCustomFields] = useState<CustomRegistrationField[]>(event?.custom_registration_fields || []);
   const [intervalGenerators, setIntervalGenerators] = useState<Record<string, IntervalGeneratorDraft>>({});
-  const [subActivities, setSubActivities] = useState<Array<{ id: string; name: string }>>(() => {
+  const [subActivities, setSubActivities] = useState<Array<{ id: string; name: string; overlap_exempt: boolean }>>(() => {
     const savedV2 = (event?.sub_activities || []).filter((item) => item?.id && item?.name);
-    if (savedV2.length) return savedV2.map((item) => ({ id: item.id, name: item.name }));
+    if (savedV2.length) return savedV2.map((item) => ({ id: item.id, name: item.name, overlap_exempt: Boolean(item.overlap_exempt) }));
     const saved = (event?.sub_activity_definitions || []).filter((item) => item?.id && item?.name);
-    if (saved.length) return saved.map((item) => ({ id: item.id, name: item.name }));
+    if (saved.length) return saved.map((item) => ({ id: item.id, name: item.name, overlap_exempt: false }));
     const legacy = new Map<string, string>();
     for (const item of event?.sessions || []) {
       const name = String(item.sub_activity_name || "").trim();
@@ -116,7 +116,7 @@ export function AdminEventForm({ event, forceMulti = false, forceMode }: { event
       const key = String(item.sub_activity_key || "").trim() || `legacy-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${createStableClientId().slice(-6)}`;
       if (![...legacy.values()].includes(name)) legacy.set(key, name);
     }
-    return legacy.size ? [...legacy.entries()].map(([id, name]) => ({ id, name })) : [{ id: createStableClientId(), name: "" }];
+    return legacy.size ? [...legacy.entries()].map(([id, name]) => ({ id, name, overlap_exempt: false })) : [{ id: createStableClientId(), name: "", overlap_exempt: false }];
   });
 
   function generateInviteCode() {
@@ -191,7 +191,7 @@ export function AdminEventForm({ event, forceMulti = false, forceMode }: { event
       const used = new Set(current.map((item) => item.id));
       let id = createStableClientId();
       while (used.has(id)) id = createStableClientId();
-      return [...current, { id, name: "" }];
+      return [...current, { id, name: "", overlap_exempt: false }];
     });
     setError("");
   }
@@ -439,7 +439,7 @@ export function AdminEventForm({ event, forceMulti = false, forceMode }: { event
     setError("");
     const form = new FormData(formEvent.currentTarget);
     const value = (name: string) => String(form.get(name) || "").trim();
-    const cleanSubActivities = subActivities.map((item) => ({ id: String(item.id || "").trim(), name: item.name.trim() }));
+    const cleanSubActivities = subActivities.map((item) => ({ id: String(item.id || "").trim(), name: item.name.trim(), overlap_exempt: Boolean(item.overlap_exempt) }));
     const validSubActivityIds = new Set(cleanSubActivities.map((item) => item.id));
     const modeSessions = isStructuredMode
       ? sessions.filter((session) => subActivityMode
@@ -530,6 +530,7 @@ export function AdminEventForm({ event, forceMulti = false, forceMode }: { event
         name: activity.name,
         sort_order: activityIndex,
         is_active: true,
+        overlap_exempt: Boolean(activity.overlap_exempt),
         sessions: modeSessions.filter((session) => String(session.sub_activity_key || "") === activity.id).map((session, sessionIndex) => ({
           id: session.id,
           session_date: session.session_date,
@@ -674,7 +675,7 @@ export function AdminEventForm({ event, forceMulti = false, forceMode }: { event
               return <article className="multi-date-editor-card sub-activity-builder-card" key={activity.id}>
                 <header className="multi-date-editor-header">
                   <div><CalendarDays /><label className="field sub-activity-title-field"><span>子活動 {activityIndex + 1} 名稱 *</span><input value={activity.name} onChange={(e)=>renameSubActivity(activity.id,e.target.value)} placeholder="例如：禪繞畫工作坊" required /></label>{activityName && <strong>總名額 {activityCapacity} 人</strong>}</div>
-                  <div><button type="button" className="button button-secondary button-small" onClick={()=>addSubActivitySession(activity)} disabled={!activityName}><Plus />新增時段</button><button type="button" className="icon-button danger" onClick={()=>removeSubActivity(activity.id)} disabled={subActivities.length===1}><Trash2 /></button></div>
+                  <div><label className="sub-activity-overlap-exempt"><input type="checkbox" checked={Boolean(activity.overlap_exempt)} onChange={(e)=>setSubActivities((current)=>current.map((item)=>item.id===activity.id?{...item,overlap_exempt:e.target.checked}:item))}/><span><strong>時間重疊豁免</strong><small>啟用後，此子活動可與其他已選子活動時段重疊。</small></span></label><button type="button" className="button button-secondary button-small" onClick={()=>addSubActivitySession(activity)} disabled={!activityName}><Plus />新增時段</button><button type="button" className="icon-button danger" onClick={()=>removeSubActivity(activity.id)} disabled={subActivities.length===1}><Trash2 /></button></div>
                 </header>
                 {activitySessions.length === 0 ? <div className="empty-session-drop"><Clock3 /><span>子活動已建立。你可以按「新增時段」設定日期、時間及人數；如暫時未設定時段，可先以「草稿」儲存。</span></div> : <div className="date-session-editor-list">
                   {activitySessions.map((session, sessionIndex) => {

@@ -176,15 +176,37 @@ async function getSiteConfirmedTotal(): Promise<number> {
   return rows.reduce((total: number, event: { confirmed_count: number | null }) => total + Number(event.confirmed_count || 0), 0);
 }
 
+const TELEGRAM_REGISTRATION_SELECT = "*, event:events(*), sub_activity:event_sub_activities(*), sub_activity_session:event_sub_activity_sessions(*)";
+
 async function getRegistrationWithEvent(registrationId: string): Promise<RegistrationRecord | null> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("registrations")
-    .select("*, event:events(*)")
+    .select(TELEGRAM_REGISTRATION_SELECT)
     .eq("id", registrationId)
     .maybeSingle();
   if (error) throw error;
   return (data as RegistrationRecord | null) ?? null;
+}
+
+async function getRegistrationGroup(registration: RegistrationRecord): Promise<RegistrationRecord[]> {
+  if (!registration.registration_group_id) return [registration];
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("registrations")
+    .select(TELEGRAM_REGISTRATION_SELECT)
+    .eq("registration_group_id", registration.registration_group_id)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return ((data as RegistrationRecord[]) ?? []).filter((item) => item.event_id === registration.event_id);
+}
+
+async function claimRegistrationGroupQueue(registrations: RegistrationRecord[]): Promise<TelegramNotificationQueueRecord[]> {
+  const claimed: TelegramNotificationQueueRecord[] = [];
+  for (const registration of registrations) {
+    claimed.push(...await claimQueue(1, registration.id));
+  }
+  return claimed;
 }
 
 async function claimQueue(limit: number, registrationId: string | null): Promise<TelegramNotificationQueueRecord[]> {
@@ -245,6 +267,15 @@ function statusLabel(registration: RegistrationRecord): string {
   return "已確認";
 }
 
+function subActivityItemLabel(registration: RegistrationRecord): string | null {
+  const name = registration.sub_activity?.name;
+  const session = registration.sub_activity_session;
+  if (!name || !session) return null;
+  const start = formatHongKongDateTime(session.start_at);
+  const endTime = new Intl.DateTimeFormat("zh-HK", { timeZone:"Asia/Hong_Kong", hour:"2-digit", minute:"2-digit", hour12:false }).format(new Date(session.end_at));
+  return `${name}｜${start}–${endTime}`;
+}
+
 function buildInstantMessage(registration: RegistrationRecord, event: EventRecord, siteTotal: number): string {
   const eventTotal = event.confirmed_count;
   const remaining = Math.max(0, event.capacity - event.confirmed_count);
@@ -260,6 +291,31 @@ function buildInstantMessage(registration: RegistrationRecord, event: EventRecor
     `尚餘名額：${remaining}`,
     `全站已確認報名：<b>${siteTotal}</b>`,
     `報名時間：${formatHongKongDateTime(registration.created_at)}`,
+  ].join("\n");
+}
+
+function buildSubActivityGroupMessage(registrations: RegistrationRecord[], event: EventRecord, siteTotal: number): string {
+  const primary = registrations[0];
+  const confirmed = registrations.filter((item) => item.status === "confirmed");
+  const waitlist = registrations.filter((item) => item.status === "waitlist");
+  const itemLines = registrations.map((item) => {
+    const label = subActivityItemLabel(item) || item.sub_activity?.name || "子活動";
+    return `• ${escapeHtml(label)}（${statusLabel(item)}）`;
+  });
+  return [
+    "🔔 <b>子活動最新報名</b>",
+    "",
+    `活動：<b>${escapeHtml(event.title)}</b>`,
+    `參加者：<b>${escapeHtml(primary.full_name)}</b>`,
+    `電話：${escapeHtml(primary.phone)}`,
+    ...(primary.email ? [`電郵：${escapeHtml(primary.email)}`] : []),
+    "",
+    `<b>所報名子活動（${registrations.length} 項）</b>`,
+    ...itemLines,
+    "",
+    `已確認：${confirmed.length} 項${waitlist.length ? `｜候補：${waitlist.length} 項` : ""}`,
+    `全站已確認報名：<b>${siteTotal}</b>`,
+    `報名時間：${formatHongKongDateTime(primary.created_at)}`,
   ].join("\n");
 }
 
@@ -289,11 +345,12 @@ function buildDigestMessage(
     entry.registrations.push(registration);
     grouped.set(registration.event.id, entry);
   }
-
+  const participantGroupKeys = new Set(registrations.map((item) => `${item.event_id}:${item.registration_group_id || item.id}`));
   const lines = [
     `📊 <b>${TELEGRAM_FREQUENCY_LABELS[frequency]}報名彙總</b>`,
     `統計時間：${formatHongKongDateTime(new Date())}`,
-    `新增報名：<b>${registrations.length}</b> 位`,
+    `新增參加者：<b>${participantGroupKeys.size}</b> 位`,
+    `新增報名項目：<b>${registrations.length}</b> 項`,
     `全站已確認報名：<b>${siteTotal}</b> 位`,
     "",
   ];
@@ -301,19 +358,32 @@ function buildDigestMessage(
   let visibleNames = 0;
   for (const { event, registrations: eventRegistrations } of grouped.values()) {
     lines.push(`🎫 <b>${escapeHtml(event.title)}</b>`);
-    lines.push(`總報名：${event.confirmed_count} / ${event.capacity}`);
+    const participantGroups = new Map<string, RegistrationRecord[]>();
     for (const registration of eventRegistrations) {
+      const key = registration.registration_group_id || registration.id;
+      participantGroups.set(key, [...(participantGroups.get(key) || []), registration]);
+    }
+    for (const group of participantGroups.values()) {
       if (visibleNames >= MAX_VISIBLE_NAMES) break;
-      lines.push(`• ${escapeHtml(registration.full_name)}（${statusLabel(registration)}）`);
-      lines.push(`  電話：${escapeHtml(registration.phone)}`);
-      if (registration.email) lines.push(`  電郵：${escapeHtml(registration.email)}`);
+      const primary = group[0];
+      lines.push(`• <b>${escapeHtml(primary.full_name)}</b>`);
+      lines.push(`  電話：${escapeHtml(primary.phone)}`);
+      if (primary.email) lines.push(`  電郵：${escapeHtml(primary.email)}`);
+      if (event.event_mode === "sub_activity" || event.sub_activity_mode) {
+        for (const item of group) {
+          const label = subActivityItemLabel(item) || item.sub_activity?.name || "子活動";
+          lines.push(`  ↳ ${escapeHtml(label)}（${statusLabel(item)}）`);
+        }
+      } else {
+        lines.push(`  狀態：${statusLabel(primary)}`);
+      }
       visibleNames += 1;
     }
     lines.push("");
   }
 
-  if (registrations.length > visibleNames) {
-    lines.push(`另有 ${registrations.length - visibleNames} 位新報名者未逐一列出。`);
+  if (participantGroupKeys.size > visibleNames) {
+    lines.push(`另有 ${participantGroupKeys.size - visibleNames} 位新報名者未逐一列出。`);
   }
 
   const text = lines.join("\n").trim();
@@ -332,33 +402,26 @@ export async function notifyNewRegistration(registrationId: string): Promise<Tel
       return { ok: true, skipped: "instant_disabled" };
     }
 
-    claimed = await claimQueue(1, registrationId);
-    if (!claimed.length) return { ok: true, skipped: "nothing_to_send" };
-
     const registration = await getRegistrationWithEvent(registrationId);
-    if (!registration?.event) {
-      await releaseQueue(claimed.map((item) => item.id), "Registration or event not found");
-      return { ok: false, error: "registration_not_found" };
-    }
+    if (!registration?.event) return { ok: false, error: "registration_not_found" };
+    const isSubActivity = registration.event.event_mode === "sub_activity" || registration.event.sub_activity_mode;
+    const group = isSubActivity ? await getRegistrationGroup(registration) : [registration];
+    claimed = isSubActivity ? await claimRegistrationGroupQueue(group) : await claimQueue(1, registrationId);
+    if (!claimed.length) return { ok: true, skipped: "nothing_to_send" };
 
     const siteTotal = await getSiteConfirmedTotal();
     const sent = await sendTelegramMessage(
       settings.chat_id,
-      buildInstantMessage(registration, registration.event, siteTotal),
+      isSubActivity ? buildSubActivityGroupMessage(group, registration.event, siteTotal) : buildInstantMessage(registration, registration.event, siteTotal),
     );
     await markDelivered(claimed.map((item) => item.id), sent.message_id);
-    await updateSettingsStatus({
-      last_sent_at: new Date().toISOString(),
-      last_error: null,
-    });
+    await updateSettingsStatus({ last_sent_at: new Date().toISOString(), last_error: null });
     return { ok: true, sent: 1 };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Telegram notification failed";
     try {
       await releaseQueue(claimed.map((item) => item.id), message);
-      if (isServiceRoleConfigured()) {
-        await updateSettingsStatus({ last_error: message.slice(0, 1000) });
-      }
+      if (isServiceRoleConfigured()) await updateSettingsStatus({ last_error: message.slice(0, 1000) });
     } catch (statusError) {
       console.error("Unable to record Telegram notification error", statusError);
     }
@@ -388,7 +451,7 @@ export async function processTelegramNotificationQueue(): Promise<TelegramProces
     const registrationIds = claimed.map((item) => item.registration_id);
     const { data, error } = await admin
       .from("registrations")
-      .select("*, event:events(*)")
+      .select(TELEGRAM_REGISTRATION_SELECT)
       .in("id", registrationIds)
       .order("created_at", { ascending: true });
     if (error) throw error;
@@ -398,22 +461,34 @@ export async function processTelegramNotificationQueue(): Promise<TelegramProces
 
     if (settings.frequency === "instant") {
       let sentCount = 0;
+      const notificationGroups = new Map<string, { registrations: RegistrationRecord[]; queueIds: string[] }>();
       for (const queueItem of claimed) {
         const registration = registrations.find((item) => item.id === queueItem.registration_id);
         if (!registration?.event) {
           await releaseQueue([queueItem.id], "Registration or event not found");
           continue;
         }
+        const isSubActivity = registration.event.event_mode === "sub_activity" || registration.event.sub_activity_mode;
+        const key = isSubActivity ? `${registration.event_id}:${registration.registration_group_id || registration.id}` : registration.id;
+        const entry = notificationGroups.get(key) || { registrations: [], queueIds: [] };
+        entry.registrations.push(registration);
+        entry.queueIds.push(queueItem.id);
+        notificationGroups.set(key, entry);
+      }
+      for (const entry of notificationGroups.values()) {
+        const primary = entry.registrations[0];
+        if (!primary?.event) continue;
         try {
+          const isSubActivity = primary.event.event_mode === "sub_activity" || primary.event.sub_activity_mode;
           const sent = await sendTelegramMessage(
             settings.chat_id,
-            buildInstantMessage(registration, registration.event, siteTotal),
+            isSubActivity ? buildSubActivityGroupMessage(entry.registrations, primary.event, siteTotal) : buildInstantMessage(primary, primary.event, siteTotal),
           );
-          await markDelivered([queueItem.id], sent.message_id);
+          await markDelivered(entry.queueIds, sent.message_id);
           sentCount += 1;
         } catch (error) {
           const message = error instanceof Error ? error.message : "Telegram notification failed";
-          await releaseQueue([queueItem.id], message);
+          await releaseQueue(entry.queueIds, message);
         }
       }
       await updateSettingsStatus({

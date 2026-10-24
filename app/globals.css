@@ -1129,3 +1129,6 @@ html[data-mobile-layout="true"] .mobile-home-top-tabs { display: grid; }
   .sub-activity-title-field { min-width: 0; width: 100%; }
   .admin-sub-activity-registration-section { padding: 14px; }
 }
+
+/* Sub-activity overlap exemption */
+.sub-activity-overlap-exempt{display:flex;align-items:flex-start;gap:8px;max-width:230px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft);cursor:pointer}.sub-activity-overlap-exempt input{margin-top:3px}.sub-activity-overlap-exempt span{display:grid;gap:2px}.sub-activity-overlap-exempt strong{font-size:11px}.sub-activity-overlap-exempt small{font-size:9px;line-height:1.35;color:var(--muted)}

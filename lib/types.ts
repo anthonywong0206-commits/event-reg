@@ -41,6 +41,7 @@ export interface SubActivityRecord {
   name: string;
   sort_order: number;
   is_active: boolean;
+  overlap_exempt?: boolean;
   sessions?: SubActivitySessionRecord[];
   created_at?: string;
   updated_at?: string;
@@ -58,6 +59,7 @@ export interface EventSessionRecord {
   is_active: boolean;
   sub_activity_name?: string | null;
   sub_activity_key?: string | null;
+  sub_activity_overlap_exempt?: boolean;
   created_at?: string;
   updated_at?: string;
 }

@@ -28,6 +28,7 @@ function projectSubActivitySessions(event: EventRecord): EventSessionRecord[] {
     is_active: session.is_active && activity.is_active,
     sub_activity_name: activity.name,
     sub_activity_key: activity.id,
+    sub_activity_overlap_exempt: Boolean(activity.overlap_exempt),
     created_at: session.created_at,
     updated_at: session.updated_at,
   })));
@@ -82,6 +83,7 @@ function normalizeRegistration(row: RegistrationRecord): RegistrationRecord {
       is_active: row.sub_activity_session.is_active,
       sub_activity_name: activity?.name || null,
       sub_activity_key: activity?.id || row.sub_activity_id || null,
+      sub_activity_overlap_exempt: Boolean(activity?.overlap_exempt),
     },
   };
 }

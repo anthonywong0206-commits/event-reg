@@ -124,6 +124,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         .eq("id", registration.id);
     }
 
+    // Return the same joined shape used by the participant manager so V2 sub-activity
+    // registrations appear in the correct child list immediately after a manual add.
+    if (isSubActivity) {
+      const { data: joined } = await admin.from("registrations")
+        .select("*, sub_activity:event_sub_activities(*), sub_activity_session:event_sub_activity_sessions(*)")
+        .eq("id", registration.id).maybeSingle();
+      if (joined) {
+        registration = joined as RegistrationRecord;
+        if (registration.sub_activity_session) registration.session = {
+          ...registration.sub_activity_session,
+          sub_activity_name: registration.sub_activity?.name || null,
+          sub_activity_key: registration.sub_activity?.id || registration.sub_activity_id || null,
+          sub_activity_overlap_exempt: Boolean(registration.sub_activity?.overlap_exempt),
+        };
+      }
+    }
+
     // Manual additions use the same Telegram notification queue as public registrations.
     await notifyNewRegistration(registration.id);
 

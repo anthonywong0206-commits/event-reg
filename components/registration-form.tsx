@@ -11,15 +11,20 @@ export function RegistrationForm({ event, initialMethod, inviteAccessToken }: { 
   const router = useRouter();
   const activeSessions = useMemo(() => (event.sessions || []).filter((item) => item.is_active && new Date(item.start_at).getTime() > Date.now()).sort((a,b)=>a.start_at.localeCompare(b.start_at)), [event.sessions]);
   const subActivityGroups = useMemo(() => {
-    if (!event.sub_activity_mode) return [] as { name: string; sessions: typeof activeSessions }[];
-    const groups = new Map<string, typeof activeSessions>();
+    if (!event.sub_activity_mode) return [] as { id: string; name: string; overlap_exempt: boolean; sessions: typeof activeSessions }[];
+    const activityById = new Map<string, NonNullable<EventRecord["sub_activities"]>[number]>((event.sub_activities || []).map((activity) => [activity.id, activity]));
+    const groups = new Map<string, { id: string; name: string; overlap_exempt: boolean; sessions: typeof activeSessions }>();
     for (const session of activeSessions) {
+      const id = String(session.sub_activity_key || "").trim();
       const name = String(session.sub_activity_name || "").trim();
-      if (!name) continue;
-      groups.set(name, [...(groups.get(name) || []), session]);
+      if (!id || !name) continue;
+      const activity = activityById.get(id);
+      const current = groups.get(id) || { id, name, overlap_exempt: Boolean(activity?.overlap_exempt || session.sub_activity_overlap_exempt), sessions: [] };
+      current.sessions.push(session);
+      groups.set(id, current);
     }
-    return [...groups.entries()].map(([name, sessions]) => ({ name, sessions }));
-  }, [activeSessions, event.sub_activity_mode]);
+    return [...groups.values()];
+  }, [activeSessions, event.sub_activity_mode, event.sub_activities]);
   const dateGroups = useMemo(() => {
     const groups = new Map<string, typeof activeSessions>();
     for (const session of activeSessions) groups.set(session.session_date, [...(groups.get(session.session_date)||[]), session]);
@@ -41,11 +46,11 @@ export function RegistrationForm({ event, initialMethod, inviteAccessToken }: { 
     setSessionId(next?.id||"");
   }
 
-  function toggleSubActivitySession(name: string, candidateId: string) {
+  function toggleSubActivitySession(activityId: string, candidateId: string) {
     setError("");
-    const currentId = selectedSubSessions[name];
+    const currentId = selectedSubSessions[activityId];
     if (currentId === candidateId) {
-      setSelectedSubSessions((current) => { const next = { ...current }; delete next[name]; return next; });
+      setSelectedSubSessions((current) => { const next = { ...current }; delete next[activityId]; return next; });
       return;
     }
     const isNewActivity = !currentId;
@@ -56,16 +61,19 @@ export function RegistrationForm({ event, initialMethod, inviteAccessToken }: { 
     }
     const candidate = activeSessions.find((item) => item.id === candidateId);
     if (!candidate) return;
-    const conflict = Object.entries(selectedSubSessions).some(([otherName, otherId]) => {
-      if (otherName === name) return false;
+    const candidateActivity = subActivityGroups.find((group) => group.id === activityId);
+    const conflict = Object.entries(selectedSubSessions).some(([otherActivityId, otherId]) => {
+      if (otherActivityId === activityId) return false;
       const other = activeSessions.find((item) => item.id === otherId);
+      const otherActivity = subActivityGroups.find((group) => group.id === otherActivityId);
+      if (candidateActivity?.overlap_exempt || otherActivity?.overlap_exempt) return false;
       return Boolean(other && new Date(candidate.start_at).getTime() < new Date(other.end_at).getTime() && new Date(other.start_at).getTime() < new Date(candidate.end_at).getTime());
     });
     if (conflict) {
       setError("所選子活動時段與另一個已選時段重疊，請選擇其他時段。");
       return;
     }
-    setSelectedSubSessions((current) => ({ ...current, [name]: candidateId }));
+    setSelectedSubSessions((current) => ({ ...current, [activityId]: candidateId }));
   }
 
   async function handleSubmit(formEvent: FormEvent<HTMLFormElement>) {
@@ -84,8 +92,8 @@ export function RegistrationForm({ event, initialMethod, inviteAccessToken }: { 
   return <form className="registration-form" onSubmit={handleSubmit}>
     {joiningWaitlist&&<div className="notice notice-waitlist"><AlertCircle/><span><strong>現只接受候補登記</strong>候補並不代表成功參加活動；如沒有收到主辦單位進一步通知，則視作未能申請。</span></div>}
     {event.sub_activity_mode && <fieldset className="form-section sub-activity-public-selector"><legend>第一步：選擇子活動及時段</legend>
-      <div className="sub-activity-selection-summary"><strong>已選 {selectedSubSessionIds.length} / 最多 {Math.max(1,Number(event.max_sub_activity_selections||1))} 個子活動</strong><span>同一子活動只可選一個時段；時間重疊的項目不能同時報名。</span></div>
-      <div className="sub-activity-public-list">{subActivityGroups.map((group)=>{const selectedId=selectedSubSessions[group.name];return <article className={selectedId?"sub-activity-public-card selected":"sub-activity-public-card"} key={group.name}><header><strong>{group.name}</strong><small>{selectedId?"已選擇 1 個時段":"請選擇一個時段"}</small></header><div className="sub-activity-session-options">{group.sessions.map((session)=>{const remaining=Math.max(0,session.capacity-session.confirmed_count);const checked=selectedId===session.id;return <label key={session.id} className={checked?"sub-activity-session-option selected":"sub-activity-session-option"}><input type="checkbox" checked={checked} disabled={remaining===0&&!event.accepts_waitlist} onChange={()=>toggleSubActivitySession(group.name,session.id)} /><span><b>{dateLabel.format(new Date(`${session.session_date}T12:00:00`))}</b><strong>{timeLabel.format(new Date(session.start_at))}–{timeLabel.format(new Date(session.end_at))}</strong><small>{remaining===0?(event.accepts_waitlist?"只接受候補":"名額已滿"):`尚餘 ${remaining} 位`}</small></span></label>})}</div></article>})}</div>
+      <div className="sub-activity-selection-summary"><strong>已選 {selectedSubSessionIds.length} / 最多 {Math.max(1,Number(event.max_sub_activity_selections||1))} 個子活動</strong><span>同一子活動只可選一個時段；標示「時間重疊豁免」的子活動可與其他時段重疊。</span></div>
+      <div className="sub-activity-public-list">{subActivityGroups.map((group)=>{const selectedId=selectedSubSessions[group.id];return <article className={selectedId?"sub-activity-public-card selected":"sub-activity-public-card"} key={group.id}><header><strong>{group.name}</strong><small>{group.overlap_exempt?"時間重疊豁免":selectedId?"已選擇 1 個時段":"請選擇一個時段"}</small></header><div className="sub-activity-session-options">{group.sessions.map((session)=>{const remaining=Math.max(0,session.capacity-session.confirmed_count);const checked=selectedId===session.id;return <label key={session.id} className={checked?"sub-activity-session-option selected":"sub-activity-session-option"}><input type="checkbox" checked={checked} disabled={remaining===0&&!event.accepts_waitlist} onChange={()=>toggleSubActivitySession(group.id,session.id)} /><span><b>{dateLabel.format(new Date(`${session.session_date}T12:00:00`))}</b><strong>{timeLabel.format(new Date(session.start_at))}–{timeLabel.format(new Date(session.end_at))}</strong><small>{remaining===0?(event.accepts_waitlist?"只接受候補":"名額已滿"):`尚餘 ${remaining} 位`}</small></span></label>})}</div></article>})}</div>
       {subActivityGroups.length===0&&<div className="notice notice-error">暫時沒有可報名的子活動時段</div>}
     </fieldset>}
     {event.is_multi_session && !event.sub_activity_mode && <fieldset className="form-section"><legend>第一步：選擇活動日期</legend><div className="date-choice-grid">{dateGroups.map(({date,sessions})=>{const capacity=sessions.reduce((sum,item)=>sum+item.capacity,0);const confirmed=sessions.reduce((sum,item)=>sum+item.confirmed_count,0);const remaining=Math.max(0,capacity-confirmed);return <button type="button" key={date} className={selectedDate===date?"date-choice selected":"date-choice"} onClick={()=>chooseDate(date)}><CalendarDays/><span><strong>{dateLabel.format(new Date(`${date}T12:00:00`))}</strong><small>{remaining===0?(event.accepts_waitlist?"現只接受候補":"所有時段已滿"):`當日尚餘 ${remaining} 位`}</small></span></button>})}</div>{dateGroups.length===0&&<div className="notice notice-error">暫時沒有可報名日期</div>}</fieldset>}

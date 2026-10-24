@@ -86,9 +86,25 @@ export async function PUT(
       throw error;
     }
 
+    let responseData = data as RegistrationRecord;
+    if (isSubActivity) {
+      const { data: joined } = await admin.from("registrations")
+        .select("*, sub_activity:event_sub_activities(*), sub_activity_session:event_sub_activity_sessions(*)")
+        .eq("id", registrationId).maybeSingle();
+      if (joined) {
+        responseData = joined as RegistrationRecord;
+        if (responseData.sub_activity_session) responseData.session = {
+          ...responseData.sub_activity_session,
+          sub_activity_name: responseData.sub_activity?.name || null,
+          sub_activity_key: responseData.sub_activity?.id || responseData.sub_activity_id || null,
+          sub_activity_overlap_exempt: Boolean(responseData.sub_activity?.overlap_exempt),
+        };
+      }
+    }
+
     revalidatePath(`/admin/events/${eventId}/registrations`);
     revalidatePath("/admin");
-    return NextResponse.json(data);
+    return NextResponse.json(responseData);
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "未獲授權" }, { status: 401 });
